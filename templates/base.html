@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>{%block title %}EcoEnergy{% endblock %}</title>
+</head>
+<body>
+    <nav>
+        <a href="{% url 'dispositivos:inicio' %}">inicio</a>
+        <a href="{% url 'dispositivos:catalogo' %}">dispositivos</a>
+    </nav>
+    <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

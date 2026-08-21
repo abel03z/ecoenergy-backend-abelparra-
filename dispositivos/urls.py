@@ -13,6 +13,7 @@ from . import views
 app_name = "dispositivos"
 
 urlpatterns = [
+    path("dispositivos/", views.catalogo, name="catalogo"),
     path("", views.inicio, name="inicio"),
     path(
         "zonas/<int:zona_id>/dispositivos/",
