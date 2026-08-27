@@ -28,6 +28,7 @@ from dispositivos.data_access import (
     categoria_por_id,
     calcular_consumo_total,
     calcular_estado,
+    resumen_por_zona,
 )
 
 
@@ -70,3 +71,19 @@ def zona_detalle(request, zona_id):
         "cantidad_dispositivos": len(disp),
     }
     return render(request, "dispositivos/zona_detalle.html", contexto)
+
+
+def resumen_zonas(request):
+    zonas_resumen = resumen_por_zona()
+
+    total_zonas = len(zonas_resumen)
+    total_dispositivos = sum(z["cantidad_dispositivos"] for z in zonas_resumen)
+    consumo_total_general = sum(z["consumo_total"] for z in zonas_resumen)
+
+    contexto = {
+        "zonas": zonas_resumen,
+        "total_zonas": total_zonas,
+        "total_dispositivos": total_dispositivos,
+        "consumo_total_general": humanize.intcomma(consumo_total_general),
+    }
+    return render(request, "dispositivos/resumen_zonas.html", contexto)

@@ -8,4 +8,5 @@ urlpatterns = [
     path("dispositivos/", views.catalogo, name="catalogo"),
     path("zonas/", views.zonas, name="zonas"),
     path("zonas/<int:zona_id>/", views.zona_detalle, name="zona_detalle"),
+    path("resumen-zonas/", views.resumen_zonas, name="resumen_zonas"),
 ]

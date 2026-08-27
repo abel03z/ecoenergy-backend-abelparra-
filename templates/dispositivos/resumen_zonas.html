@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Resumen de consumo por zona | EcoEnergy{% endblock %}
+
+{% block content %}
+<h1 class="mb-1">Resumen de consumo por zona</h1>
+<p class="text-muted mb-4">Datos agrupados desde zonas.json y dispositivos.json</p>
+
+<div class="row row-cols-1 row-cols-md-3 g-4 mb-4">
+    <div class="col">
+        <div class="card h-100 border-success shadow-sm">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted text-uppercase small mb-2">Zonas</h6>
+                <p class="card-text fs-3 fw-bold mb-0">{{ total_zonas }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="card h-100 border-primary shadow-sm">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted text-uppercase small mb-2">Dispositivos</h6>
+                <p class="card-text fs-3 fw-bold mb-0">{{ total_dispositivos }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="card h-100 border-warning shadow-sm">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted text-uppercase small mb-2">Consumo total</h6>
+                <p class="card-text fs-3 fw-bold mb-0">{{ consumo_total_general }} kWh</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if zonas %}
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th scope="col">Zona</th>
+                <th scope="col">Dispositivos</th>
+                <th scope="col">Consumo</th>
+                <th scope="col">Límite</th>
+                <th scope="col">Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for zona in zonas %}
+            <tr>
+                <td>{{ zona.nombre }}</td>
+                <td>{{ zona.cantidad_dispositivos }}</td>
+                <td>{{ zona.consumo_total }} kWh</td>
+                <td>{{ zona.limite_kwh }} kWh</td>
+                <td>
+                    {% if zona.estado == "LÍMITE SUPERADO" %}
+                    <span class="badge rounded-pill text-bg-danger">{{ zona.estado }}</span>
+                    {% else %}
+                    <span class="badge rounded-pill text-bg-success">{{ zona.estado }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="alert alert-info">No hay zonas disponibles.</div>
+{% endif %}
+{% endblock %}
