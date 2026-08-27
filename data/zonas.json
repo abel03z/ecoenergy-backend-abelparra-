@@ -1,0 +1,6 @@
+[
+  {"id": 1, "nombre": "Zona Administrativa", "limite_kwh": 500.0},
+  {"id": 2, "nombre": "Zona Producción", "limite_kwh": 1200.0},
+  {"id": 3, "nombre": "Zona Bodega", "limite_kwh": 300.0},
+  {"id": 4, "nombre": "Zona Exterior", "limite_kwh": 200.0}
+]

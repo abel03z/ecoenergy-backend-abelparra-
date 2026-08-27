@@ -1,3 +1,4 @@
 asgiref==3.12.1
 Django==6.1
+humanize==4.16.0
 sqlparse==0.6.0

@@ -1,0 +1,10 @@
+[
+  {"id": 1, "nombre": "Aire acondicionado A1", "consumo_kwh": 150.0, "zona_id": 1, "categoria_id": 1},
+  {"id": 2, "nombre": "Luminaria pasillo", "consumo_kwh": 40.0, "zona_id": 1, "categoria_id": 2},
+  {"id": 3, "nombre": "Calefactor oficina", "consumo_kwh": 120.0, "zona_id": 1, "categoria_id": 1},
+  {"id": 4, "nombre": "Torno industrial", "consumo_kwh": 600.0, "zona_id": 2, "categoria_id": 3},
+  {"id": 5, "nombre": "Prensa hidráulica", "consumo_kwh": 700.0, "zona_id": 2, "categoria_id": 3},
+  {"id": 6, "nombre": "Luminaria planta", "consumo_kwh": 80.0, "zona_id": 2, "categoria_id": 2},
+  {"id": 7, "nombre": "Refrigerador bodega", "consumo_kwh": 90.0, "zona_id": 3, "categoria_id": 1},
+  {"id": 8, "nombre": "Luminaria bodega", "consumo_kwh": 20.0, "zona_id": 3, "categoria_id": 2}
+]
