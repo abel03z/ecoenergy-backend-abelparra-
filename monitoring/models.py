@@ -34,11 +34,11 @@ class Mantenimiento(BaseModel):
         on_delete=models.PROTECT,
         related_name="mantenimientos",
     )
-    usuario = models.ForeignKey(
-        "organizations.Usuario",
-        on_delete=models.PROTECT,
-        related_name="mantenimientos",
-    )
+#    usuario = models.ForeignKey(
+#        "organizations.Usuario",
+#        on_delete=models.PROTECT,
+#        related_name="mantenimientos",
+#    )
     tipo = models.CharField(max_length=50)
     estado = models.CharField(max_length=50)
     fecha_programada = models.DateTimeField()
