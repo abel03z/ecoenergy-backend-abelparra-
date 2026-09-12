@@ -74,3 +74,32 @@ Una zona sin dispositivos asociados también aparece en la tabla, con cantidad 0
 - Colección de zonas vacía: la página permanece operativa y muestra un mensaje ("No hay zonas disponibles").
 - Estados: se probaron consumos bajo, igual y sobre el límite; el texto y el color (badge verde/rojo) corresponden a la regla.
 - `python manage.py check`: sin errores.
+
+
+
+## Unidad 2 — Modelos, identidad y autorización
+
+Junto a la app `dispositivos` (Fase 1/2, basada en JSON), el proyecto incorpora apps Django reales con Models/ORM: `core`, `organizations`, `devices`, `monitoring` y `accounts`.
+
+### Clase 4 — Usuarios, perfiles, grupos y permisos
+
+Se agregó la app `accounts` con el modelo `UserProfile`, que conecta el `User` de Django (autenticación) con el dominio de negocio:
+
+- `UserProfile`: `OneToOneField` a `settings.AUTH_USER_MODEL`, `ForeignKey` a `organizations.Organizacion` y `organizations.Departamento` (opcional), `employee_code` único, `phone`.
+- Validación de coherencia (`clean()`): el `departamento` seleccionado debe pertenecer a la `organizacion` del perfil.
+- Registrado en Django Admin con búsqueda y filtros por organización/departamento.
+
+**Roles (Groups) y permisos definidos:**
+
+| Grupo | Permisos |
+|---|---|
+| Administrador organizacional | add/change/view sobre Organizacion, Departamento, Zona, Categoria, Dispositivo |
+| Operador | view sobre Dispositivo; add/view sobre Medicion; view/change sobre Alerta |
+| Consulta | solo view sobre Dispositivo, Medicion, Alerta |
+
+### Pruebas realizadas (Clase 4)
+
+- Usuario de prueba `Operador1` (`is_staff=True`, sin superuser, grupo `Operador`, sin permisos individuales extra) con su `UserProfile` asociado.
+- **Acción permitida:** `Operador1` creó una `Medicion` para un `Dispositivo` existente sin error.
+- **Acción denegada:** `Operador1` recibió `403 Forbidden` al intentar acceder directo a `/admin/devices/dispositivo/add/`.
+- `python manage.py makemigrations` / `migrate`: sin errores.
