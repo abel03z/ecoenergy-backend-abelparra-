@@ -1,8 +1,16 @@
 from django.contrib import admin, messages
 from django.utils import timezone
+from core.admin_filters import OrgScopedListFilter
 from core.admin_utils import get_user_organization
 from organizations.models import Zona
 from .models import Categoria, Dispositivo
+
+
+class DispositivoZonaFilter(OrgScopedListFilter):
+    title = "zona"
+    parameter_name = "zona"
+    related_model = Zona
+    related_field_lookup = "departamento__organizacion"
 
 
 @admin.register(Categoria)
@@ -24,7 +32,7 @@ def archive_dispositivos(modeladmin, request, queryset):
 class DispositivoAdmin(admin.ModelAdmin):
     list_display = ("nombre", "categoria", "zona")
     search_fields = ("nombre", "categoria__nombre", "zona__nombre")
-    list_filter = ("categoria", "zona")
+    list_filter = ("categoria", DispositivoZonaFilter)
     ordering = ("zona__nombre", "nombre")
     list_select_related = ("categoria", "zona")
     actions = [archive_dispositivos]
