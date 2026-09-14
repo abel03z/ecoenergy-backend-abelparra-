@@ -103,3 +103,43 @@ Se agregó la app `accounts` con el modelo `UserProfile`, que conecta el `User` 
 - **Acción permitida:** `Operador1` creó una `Medicion` para un `Dispositivo` existente sin error.
 - **Acción denegada:** `Operador1` recibió `403 Forbidden` al intentar acceder directo a `/admin/devices/dispositivo/add/`.
 - `python manage.py makemigrations` / `migrate`: sin errores.
+
+### Clase 5 — Seguridad en Django Admin y scoping por organización
+
+Se implementó scoping por organización en `devices/admin.py` y `monitoring/admin.py` (Dispositivo, Medicion, Alerta y Mantenimiento): cada usuario no-superusuario solo ve y edita datos de su propia organización, resuelta vía `request.user.profile.organizacion` (`core/admin_utils.get_user_organization`). Se aplica con `get_queryset` (filtra el listado), `formfield_for_foreignkey` (limita los selectores de FK) y `has_change_permission`/`has_delete_permission` (bloquea edición/borrado cruzado). También se agregó un `DepartamentoInline` en `OrganizacionAdmin` y la acción personalizada `archive_dispositivos` (borrado lógico vía `deleted_at`).
+
+## Evaluación Sumativa II — Puesta en marcha desde cero
+
+```bash
+git clone <URL-del-repositorio>
+cd ecoenergy-backend-abelparra-
+python -m venv .venv
+source .venv/bin/activate           # Linux/Mac (bash)
+# source .venv/bin/activate.fish    # fish shell
+pip install -r requirements.txt
+
+cp .env.example .env                # deja DB_ENGINE=sqlite para probar sin motor externo
+
+python manage.py migrate
+python manage.py seed_ecoenergy     # carga datos de prueba (usar --reset para recargar)
+python manage.py runserver
+```
+
+Luego entrar a `http://127.0.0.1:8000/admin/`.
+
+### Cuentas de prueba (creadas por `seed_ecoenergy`)
+
+Todas son cuentas de prueba documentadas, no credenciales personales. Contraseña para todas: `Ecoenergy2026*`.
+
+| Usuario | Rol / grupo | Organización | Qué demuestra |
+|---|---|---|---|
+| `ADMIN` | Superusuario | — | Acceso completo, ve datos de ambas organizaciones |
+| `admin_norte` | Administrador organizacional | EcoEnergy Norte | Alta/edición de organización, departamentos, zonas, dispositivos — solo Norte |
+| `Operador1` | Operador | EcoEnergy Norte | Ve dispositivos, carga mediciones, gestiona alertas — solo Norte |
+| `Operador2` | Operador | EcoEnergy Sur | Mismo rol que Operador1, pero en Sur (para probar que no ve datos de Norte) |
+| `consulta_sur` | Consulta | EcoEnergy Sur | Solo lectura sobre dispositivos/mediciones/alertas de Sur |
+| `staff_sin_perfil` | Operador (sin `UserProfile`) | — | Caso límite: usuario staff sin organización asignada → `PermissionDenied` al entrar al Admin |
+
+### Datos cargados
+
+2 organizaciones (EcoEnergy Norte, EcoEnergy Sur) con sus propios departamentos, zonas, categorías, dispositivos, mediciones y alertas — suficientes para demostrar que un usuario de una organización no ve ni modifica datos de la otra.
