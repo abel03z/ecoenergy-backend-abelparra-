@@ -138,6 +138,16 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Autenticación y sesiones
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "devices:dashboard"
+LOGOUT_REDIRECT_URL = "login"
+
+SESSION_COOKIE_AGE = 60 * 60 * 2   # 2 horas
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_COOKIE_HTTPONLY = True
+SESSION_SAVE_EVERY_REQUEST = False
+SESSION_COOKIE_SAMESITE = "Lax"
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
