@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Mantenciones · EcoEnergy{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Mantenciones</h1>
+    {% if perms.monitoring.add_maintenance %}
+    <a href="{% url 'monitoring:maintenance_create' %}" class="btn btn-primary">Nueva mantención</a>
+    {% endif %}
+</div>
+
+<table class="table table-hover align-middle">
+    <thead class="table-light">
+        <tr>
+            <th>Dispositivo</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th>Programada</th>
+            <th>Técnico</th>
+            <th class="text-end">Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for maintenance in page_obj %}
+        <tr>
+            <td>{{ maintenance.device }}</td>
+            <td>{{ maintenance.get_type_display }}</td>
+            <td>{{ maintenance.get_status_display }}</td>
+            <td>{{ maintenance.scheduled_at|date:"d/m/Y H:i" }}</td>
+            <td>{{ maintenance.technician|default:"—" }}</td>
+            <td class="text-end">
+                {% if perms.monitoring.change_maintenance %}
+                <a href="{% url 'monitoring:maintenance_update' maintenance.pk %}" class="btn btn-sm btn-outline-primary">Editar</a>
+                {% endif %}
+                {% if perms.monitoring.delete_maintenance %}
+                <form method="post" action="{% url 'monitoring:maintenance_delete' maintenance.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger js-delete"
+                            data-item-name="{{ maintenance.device }} ({{ maintenance.get_type_display }})"
+                            data-entity="mantención">Eliminar</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No hay mantenciones registradas.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% include "includes/pagination.html" %}
+{% endblock %}
+
+{% block scripts %}
+{% include "includes/sweetalert_delete.html" %}
+{% endblock %}

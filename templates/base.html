@@ -18,6 +18,12 @@
                 {% if perms.devices.view_category %}
                 <a class="nav-link d-inline text-white me-3" href="{% url 'devices:category_list' %}">Categorías</a>
                 {% endif %}
+                {% if perms.organizations.view_zone %}
+                <a class="nav-link d-inline text-white me-3" href="{% url 'organizations:zone_list' %}">Gestión de zonas</a>
+                {% endif %}
+                {% if perms.monitoring.view_maintenance %}
+                <a class="nav-link d-inline text-white me-3" href="{% url 'monitoring:maintenance_list' %}">Mantenciones</a>
+                {% endif %}
                 <span class="text-white me-3">{{ user.username }}</span>
                 <form method="post" action="{% url 'logout' %}" class="d-inline">
                 {% csrf_token %}
