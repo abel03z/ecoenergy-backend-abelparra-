@@ -1,3 +1,94 @@
-from django.shortcuts import render
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
+from django.contrib.messages.views import SuccessMessageMixin
+from django.urls import reverse_lazy
+from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
-# Create your views here.
+from core.admin_utils import get_user_organization
+from core.pagination import paginate
+from core.views import SoftDeleteMixin
+
+from .forms import MaintenanceForm
+from .models import Maintenance
+
+
+class MaintenanceScopedMixin:
+    """Limita las mantenciones a los dispositivos de la organización del usuario."""
+
+    raise_exception = True
+
+    def get_organization(self):
+        return get_user_organization(self.request)
+
+    def get_queryset(self):
+        # Maintenance.objects ya excluye las mantenciones eliminadas lógicamente.
+        qs = Maintenance.objects.select_related("device", "technician")
+        if not self.request.user.is_superuser:
+            qs = qs.filter(device__zone__department__organization=self.get_organization())
+        return qs.order_by("-scheduled_at", "pk")
+
+
+class MaintenanceListView(
+    LoginRequiredMixin, PermissionRequiredMixin, MaintenanceScopedMixin, ListView
+):
+    permission_required = "monitoring.view_maintenance"
+    template_name = "monitoring/maintenance_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        page_obj, page_size, page_sizes = paginate(self.request, self.get_queryset())
+        context.update(
+            {"page_obj": page_obj, "page_size": page_size, "page_sizes": page_sizes}
+        )
+        return context
+
+
+class MaintenanceFormMixin(MaintenanceScopedMixin):
+    form_class = MaintenanceForm
+    template_name = "crud/form.html"
+    success_url = reverse_lazy("monitoring:maintenance_list")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["organization"] = self.get_organization()
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["cancel_url"] = self.success_url
+        return context
+
+
+class MaintenanceCreateView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    SuccessMessageMixin,
+    MaintenanceFormMixin,
+    CreateView,
+):
+    permission_required = "monitoring.add_maintenance"
+    success_message = "Mantención creada correctamente."
+    extra_context = {"page_title": "Nueva mantención"}
+
+
+class MaintenanceUpdateView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    SuccessMessageMixin,
+    MaintenanceFormMixin,
+    UpdateView,
+):
+    permission_required = "monitoring.change_maintenance"
+    success_message = "Mantención actualizada correctamente."
+    extra_context = {"page_title": "Editar mantención"}
+
+
+class MaintenanceDeleteView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    MaintenanceScopedMixin,
+    SoftDeleteMixin,
+    DeleteView,
+):
+    permission_required = "monitoring.delete_maintenance"
+    success_url = reverse_lazy("monitoring:maintenance_list")
+    success_message = "Mantención eliminada correctamente."

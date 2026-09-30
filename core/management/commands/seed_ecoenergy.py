@@ -37,19 +37,22 @@ GROUP_PERMS = {
     "Administrador organizacional": [
         ("organizations", "organization", ["add", "change", "view"]),
         ("organizations", "department", ["add", "change", "view"]),
-        ("organizations", "zone", ["add", "change", "view"]),
+        ("organizations", "zone", ["add", "change", "delete", "view"]),
         ("devices", "category", ["add", "change", "delete", "view"]),
         ("devices", "device", ["add", "change", "delete", "view"]),
+        ("monitoring", "maintenance", ["add", "change", "delete", "view"]),
     ],
     "Operador": [
         ("devices", "device", ["view"]),
         ("monitoring", "measurement", ["add", "view"]),
         ("monitoring", "alert", ["view", "change"]),
+        ("monitoring", "maintenance", ["add", "change", "view"]),
     ],
     "Consulta": [
         ("devices", "device", ["view"]),
         ("monitoring", "measurement", ["view"]),
         ("monitoring", "alert", ["view"]),
+        ("monitoring", "maintenance", ["view"]),
     ],
 }
 

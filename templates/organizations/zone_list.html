@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Zonas · EcoEnergy{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Zonas</h1>
+    {% if perms.organizations.add_zone %}
+    <a href="{% url 'organizations:zone_create' %}" class="btn btn-primary">Nueva zona</a>
+    {% endif %}
+</div>
+
+<table class="table table-hover align-middle">
+    <thead class="table-light">
+        <tr>
+            <th>Nombre</th>
+            <th>Departamento</th>
+            <th>Organización</th>
+            <th class="text-end">Límite de consumo</th>
+            <th class="text-end">Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for zone in page_obj %}
+        <tr>
+            <td>{{ zone.name }}</td>
+            <td>{{ zone.department }}</td>
+            <td>{{ zone.department.organization }}</td>
+            <td class="text-end">{{ zone.consumption_limit }}</td>
+            <td class="text-end">
+                {% if perms.organizations.change_zone %}
+                <a href="{% url 'organizations:zone_update' zone.pk %}" class="btn btn-sm btn-outline-primary">Editar</a>
+                {% endif %}
+                {% if perms.organizations.delete_zone %}
+                <form method="post" action="{% url 'organizations:zone_delete' zone.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger js-delete"
+                            data-item-name="{{ zone.name }}" data-entity="zona">Eliminar</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted py-4">No hay zonas registradas.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% include "includes/pagination.html" %}
+{% endblock %}
+
+{% block scripts %}
+{% include "includes/sweetalert_delete.html" %}
+{% endblock %}
