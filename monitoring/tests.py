@@ -191,3 +191,115 @@ class MaintenanceCrudTests(TestCase):
         r = self.client.get(reverse("monitoring:maintenance_delete", args=[self.m_norte.pk]))
         self.assertEqual(r.status_code, 405)
         self.assertTrue(Maintenance.objects.filter(pk=self.m_norte.pk).exists())
+
+
+class MaintenanceExcelExportTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.norte = Organization.objects.create(name="Norte")
+        cls.sur = Organization.objects.create(name="Sur")
+        d_norte = Department.objects.create(organization=cls.norte, name="Ops N")
+        d_sur = Department.objects.create(organization=cls.sur, name="Ops S")
+        zone_norte = Zone.objects.create(department=d_norte, name="ZN", consumption_limit=10)
+        zone_sur = Zone.objects.create(department=d_sur, name="ZS", consumption_limit=10)
+        category = Category.objects.create(name="Medidor")
+        maker = Manufacturer.objects.create(name="Acme")
+        cls.dev_norte = Device.objects.create(name="Dev Norte", zone=zone_norte, category=category, manufacturer=maker)
+        cls.dev_sur = Device.objects.create(name="Dev Sur", zone=zone_sur, category=category, manufacturer=maker)
+        cls.evil = Device.objects.create(name="=HYPERLINK(\"http://x\")", zone=zone_norte, category=category, manufacturer=maker)
+
+        viewer = Group.objects.create(name="Con vista")
+        viewer.permissions.add(Permission.objects.get(codename="view_maintenance"))
+        cls.viewer = make_user("x_viewer", cls.norte, viewer)
+        cls.no_perm = make_user("x_noperm", cls.norte, Group.objects.create(name="Sin permisos"))
+        cls.viewer_sur = make_user("x_viewer_sur", cls.sur, viewer)
+        cls.superuser = User.objects.create_superuser("x_root", password="x")
+
+        when = timezone.now() + timedelta(days=2)
+        for i in range(3):
+            Maintenance.objects.create(device=cls.dev_norte, type=Maintenance.Type.PREVENTIVE,
+                                       scheduled_at=when + timedelta(hours=i))
+        cls.deleted = Maintenance.objects.create(device=cls.dev_norte, type=Maintenance.Type.CORRECTIVE,
+                                                 scheduled_at=when + timedelta(days=9))
+        cls.deleted.soft_delete()
+        Maintenance.objects.create(device=cls.dev_sur, type=Maintenance.Type.CORRECTIVE, scheduled_at=when)
+        Maintenance.objects.create(device=cls.evil, type=Maintenance.Type.PREVENTIVE, scheduled_at=when)
+
+    def _workbook(self, response):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        return load_workbook(BytesIO(response.content)).active
+
+    def _rows(self, response):
+        ws = self._workbook(response)
+        return [[c.value for c in row] for row in ws.iter_rows(min_row=2)]
+
+    def test_requiere_login(self):
+        r = self.client.get(reverse("monitoring:maintenance_export"))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/accounts/login/", r.url)
+
+    def test_requiere_permiso(self):
+        self.client.force_login(self.no_perm)
+        r = self.client.get(reverse("monitoring:maintenance_export"))
+        self.assertEqual(r.status_code, 403)
+
+    def test_descarga_un_xlsx_real(self):
+        self.client.force_login(self.viewer)
+        r = self.client.get(reverse("monitoring:maintenance_export"))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("spreadsheetml", r["Content-Type"])
+        self.assertIn(".xlsx", r["Content-Disposition"])
+        self.assertEqual(r.content[:2], b"PK")  # un .xlsx es un zip
+
+    def test_tiene_encabezados_y_datos_desde_la_base(self):
+        self.client.force_login(self.viewer)
+        r = self.client.get(reverse("monitoring:maintenance_export"))
+        ws = self._workbook(r)
+        headers = [c.value for c in ws[1]]
+        self.assertEqual(headers[:3], ["ID", "Dispositivo", "Zona"])
+        self.assertIn("Estado", headers)
+        rows = self._rows(r)
+        self.assertGreater(len(rows), 0)
+        ids = {row[0] for row in rows}
+        self.assertTrue(ids <= set(Maintenance.objects.values_list("pk", flat=True)))
+
+    def test_respeta_scoping_y_borrado_logico(self):
+        self.client.force_login(self.viewer)
+        rows = self._rows(self.client.get(reverse("monitoring:maintenance_export")))
+        ids = {row[0] for row in rows}
+        devices = {row[1] for row in rows}
+        # 3 normales + 1 del dispositivo "evil" (ambos de Norte); sin la eliminada ni las de Sur
+        self.assertEqual(len(rows), 4)
+        self.assertNotIn(self.deleted.pk, ids)
+        self.assertNotIn("Dev Sur", devices)
+        self.assertEqual({row[4] for row in rows}, {"Norte"})
+
+    def test_otra_organizacion_solo_ve_las_suyas(self):
+        self.client.force_login(self.viewer_sur)
+        rows = self._rows(self.client.get(reverse("monitoring:maintenance_export")))
+        self.assertEqual([row[1] for row in rows], ["Dev Sur"])
+
+    def test_superusuario_exporta_todo_lo_vigente(self):
+        self.client.force_login(self.superuser)
+        rows = self._rows(self.client.get(reverse("monitoring:maintenance_export")))
+        self.assertEqual(len(rows), Maintenance.objects.count())
+        self.assertNotIn(self.deleted.pk, {row[0] for row in rows})
+
+    def test_neutraliza_formulas_en_el_texto(self):
+        self.client.force_login(self.viewer)
+        rows = self._rows(self.client.get(reverse("monitoring:maintenance_export")))
+        names = [row[1] for row in rows]
+        self.assertIn("'=HYPERLINK(\"http://x\")", names)
+        self.assertFalse(any(n.startswith("=") for n in names))
+
+    def test_las_fechas_se_exportan_como_fechas(self):
+        import datetime
+        self.client.force_login(self.viewer)
+        rows = self._rows(self.client.get(reverse("monitoring:maintenance_export")))
+        self.assertIsInstance(rows[0][8], datetime.datetime)
+
+    def test_el_listado_muestra_el_boton_de_exportar(self):
+        self.client.force_login(self.viewer)
+        r = self.client.get(reverse("monitoring:maintenance_list"))
+        self.assertContains(r, reverse("monitoring:maintenance_export"))

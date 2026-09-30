@@ -3,9 +3,12 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="mb-0">Mantenciones</h1>
-    {% if perms.monitoring.add_maintenance %}
-    <a href="{% url 'monitoring:maintenance_create' %}" class="btn btn-primary">Nueva mantención</a>
-    {% endif %}
+    <div>
+        <a href="{% url 'monitoring:maintenance_export' %}" class="btn btn-outline-success me-2">Exportar a Excel</a>
+        {% if perms.monitoring.add_maintenance %}
+        <a href="{% url 'monitoring:maintenance_create' %}" class="btn btn-primary">Nueva mantención</a>
+        {% endif %}
+    </div>
 </div>
 
 <table class="table table-hover align-middle">
