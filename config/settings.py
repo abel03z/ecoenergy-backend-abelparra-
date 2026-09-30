@@ -111,6 +111,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 10},
+    },
+    {
+        # Mayúscula, minúscula, número y carácter especial.
+        'NAME': 'accounts.validators.ComplexityPasswordValidator',
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -124,7 +129,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es-cl'
 
 TIME_ZONE = 'UTC'
 
@@ -156,11 +161,27 @@ SESSION_COOKIE_SAMESITE = "Lax"
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
-
-PASSWORD_RESET_CODE_TTL = 120       # segundos de vigencia del código
+PASSWORD_RESET_CODE_TTL = int(os.getenv("PASSWORD_RESET_CODE_TTL", "300"))  # segundos de vigencia del código
 PASSWORD_RESET_MAX_ATTEMPTS = 5     # intentos fallidos permitidos
+
+# --- Correo (código de recuperación de contraseña) ---------------------------
+# Django 6.1 configura el correo con MAILERS. Por defecto el correo se imprime
+# en la consola del servidor (no requiere SMTP). Para enviar correos reales:
+#   EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend y las variables EMAIL_*.
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "EcoEnergy <no-reply@ecoenergy.local>")
+
+_email_backend = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+_mailer = {"BACKEND": _email_backend}
+if _email_backend.endswith("smtp.EmailBackend"):
+    _mailer["OPTIONS"] = {
+        "host": os.getenv("EMAIL_HOST", "localhost"),
+        "port": int(os.getenv("EMAIL_PORT", "25")),
+        "username": os.getenv("EMAIL_HOST_USER", ""),
+        "password": os.getenv("EMAIL_HOST_PASSWORD", ""),
+        "use_tls": os.getenv("EMAIL_USE_TLS", "False").lower() == "true",
+    }
+MAILERS = {"default": _mailer}
+
+# SOLO para demostraciones sin servidor de correo: muestra el código en pantalla.
+# Debe permanecer en False en cualquier uso real.
+PASSWORD_RESET_DEMO_MODE = os.getenv("PASSWORD_RESET_DEMO_MODE", "False").lower() == "true"

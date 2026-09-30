@@ -191,7 +191,8 @@ class Command(BaseCommand):
 
     def _create_users(self, groups, orgs):
         admin, created = User.objects.get_or_create(
-            username="ADMIN", defaults={"is_staff": True, "is_superuser": True}
+            username="ADMIN",
+            defaults={"is_staff": True, "is_superuser": True, "email": "admin@ecoenergy.test"},
         )
         if created:
             admin.set_password(TEST_PASSWORD)
@@ -204,7 +205,8 @@ class Command(BaseCommand):
         )
 
         admin_norte = User.objects.create_user(
-            username="admin_norte", password=TEST_PASSWORD, is_staff=True
+            username="admin_norte", email="admin_norte@ecoenergy.test",
+            password=TEST_PASSWORD, is_staff=True
         )
         admin_norte.groups.add(groups["Administrador organizacional"])
         UserProfile.objects.create(
@@ -215,7 +217,8 @@ class Command(BaseCommand):
         )
 
         operador1 = User.objects.create_user(
-            username="Operador1", password=TEST_PASSWORD, is_staff=True
+            username="Operador1", email="operador1@ecoenergy.test",
+            password=TEST_PASSWORD, is_staff=True
         )
         operador1.groups.add(groups["Operador"])
         UserProfile.objects.create(
@@ -226,7 +229,8 @@ class Command(BaseCommand):
         )
 
         operador2 = User.objects.create_user(
-            username="Operador2", password=TEST_PASSWORD, is_staff=True
+            username="Operador2", email="operador2@ecoenergy.test",
+            password=TEST_PASSWORD, is_staff=True
         )
         operador2.groups.add(groups["Operador"])
         UserProfile.objects.create(
@@ -237,7 +241,8 @@ class Command(BaseCommand):
         )
 
         consulta_sur = User.objects.create_user(
-            username="consulta_sur", password=TEST_PASSWORD, is_staff=True
+            username="consulta_sur", email="consulta_sur@ecoenergy.test",
+            password=TEST_PASSWORD, is_staff=True
         )
         consulta_sur.groups.add(groups["Consulta"])
         UserProfile.objects.create(
@@ -249,7 +254,8 @@ class Command(BaseCommand):
 
         # Caso límite: staff sin UserProfile (sin organización asignada).
         staff_sin_perfil = User.objects.create_user(
-            username="staff_sin_perfil", password=TEST_PASSWORD, is_staff=True
+            username="staff_sin_perfil", email="staff_sin_perfil@ecoenergy.test",
+            password=TEST_PASSWORD, is_staff=True
         )
         staff_sin_perfil.groups.add(groups["Operador"])
 
