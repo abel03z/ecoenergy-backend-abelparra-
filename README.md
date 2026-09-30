@@ -143,3 +143,42 @@ Todas son cuentas de prueba documentadas, no credenciales personales. Contraseñ
 ### Datos cargados
 
 2 organizaciones (EcoEnergy Norte, EcoEnergy Sur) con sus propios departamentos, zonas, categorías, dispositivos, mediciones y alertas — suficientes para demostrar que un usuario de una organización no ve ni modifica datos de la otra.
+
+### Clase 8 — Archivos, imágenes y confirmaciones
+
+Se extendió el CRUD protegido de `Dispositivo` (app `devices`) con una imagen opcional y eliminación confirmada con SweetAlert2.
+
+**Qué se agregó**
+
+- `MEDIA_URL = "/media/"` y `MEDIA_ROOT = BASE_DIR / "media"` en `config/settings.py`; `config/urls.py` sirve `MEDIA` solo con `DEBUG=True`. `media/` ya está en `.gitignore`.
+- `Dispositivo.image` (`ImageField`, `upload_to="devices/%Y/%m/"`, `blank=True`) + migración `0002_dispositivo_image`. Se agregó `pillow` a `requirements.txt`.
+- `DispositivoForm` (`devices/forms.py`) con validación por capas: `accept` en el navegador (solo orienta), tamaño máx. 2 MB, extensión (`.jpg`, `.jpeg`, `.png`) y contenido real con Pillow (`devices/validators.py::validate_real_image`).
+- Vistas `DispositivoCreateView`, `DispositivoUpdateView` y `DispositivoDeleteView` (`devices/views.py`), rutas `devices/dispositivos/new|<pk>/edit|<pk>/delete/`.
+- El dashboard muestra la miniatura (o "Sin imagen") comprobando `dispositivo.image` antes de usar `.url`.
+- `base.html` carga SweetAlert2 y expone `{% block scripts %}`; el botón "Eliminar" abre la confirmación y solo tras confirmar envía el formulario POST (con `csrf_token`). Si la librería no carga, se usa `confirm()`.
+- `seed_ecoenergy`: el grupo "Administrador organizacional" ahora también tiene `delete_dispositivo` (sin ese permiso nadie, salvo superusuario, podría eliminar).
+
+**Seguridad en el servidor (SweetAlert2 solo mejora la UX)**
+
+- Eliminar acepta solo `POST` (`GET` responde 405), exige CSRF, login y `devices.delete_dispositivo`.
+- Alcance por organización: el queryset filtra `zona__departamento__organizacion` (superusuario: global). Editar o eliminar un `pk` de otra organización responde 404. El selector de zona del formulario solo ofrece zonas de la organización del usuario.
+
+**Política para archivos reemplazados o eliminados**
+
+- Reemplazar o limpiar la imagen: el archivo anterior se borra del storage.
+- Eliminar el dispositivo: se borra el registro y también su archivo.
+- El borrado físico se hace con `transaction.on_commit`, para no perder el archivo si la transacción falla.
+- Editar sin subir un archivo nuevo conserva la imagen actual.
+- Si el dispositivo tiene registros protegidos (`PROTECT`), se informa con un mensaje y no se borra nada.
+- Decisión asumida: no hay historial/auditoría de imágenes; si el proyecto lo necesitara, habría que conservar los archivos anteriores.
+
+**Pruebas** (`python manage.py test devices`, 14 tests OK)
+
+| Caso | Capa que lo rechaza | Resultado |
+|---|---|---|
+| PNG válido | — | Se guarda registro y archivo |
+| PNG de más de 2 MB | `clean_image` (tamaño) | "La imagen no puede superar 2 MB."; sin registro ni archivo |
+| Imagen con extensión `.exe` | `clean_image` (extensión) | "Formato no permitido. Use JPG o PNG."; sin registro ni archivo |
+| Texto renombrado `evidencia.jpg` | Pillow (contenido) | "El archivo no es una imagen válida."; sin registro ni archivo |
+| Eliminar por GET / sin permiso / sin CSRF / otra organización | Vista | 405 / 403 / 403 / 404; el registro sigue existiendo |
+| Reemplazar imagen / eliminar dispositivo | Política | Queda 1 archivo / no queda ninguno |

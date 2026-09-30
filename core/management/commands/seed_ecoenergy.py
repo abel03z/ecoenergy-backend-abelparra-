@@ -39,7 +39,7 @@ GROUP_PERMS = {
         ("organizations", "departamento", ["add", "change", "view"]),
         ("organizations", "zona", ["add", "change", "view"]),
         ("devices", "categoria", ["add", "change", "view"]),
-        ("devices", "dispositivo", ["add", "change", "view"]),
+        ("devices", "dispositivo", ["add", "change", "delete", "view"]),
     ],
     "Operador": [
         ("devices", "dispositivo", ["view"]),
