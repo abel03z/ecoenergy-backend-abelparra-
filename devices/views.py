@@ -10,26 +10,26 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 
 from core.admin_utils import get_user_organization
-from .models import Categoria, Dispositivo
-from .forms import CategoriaForm, DispositivoForm
+from .models import Category, Device
+from .forms import CategoryForm, DeviceForm
 
 ALLOWED_PAGE_SIZES = {5, 10, 15}
 
 
 @login_required
-@permission_required("devices.view_dispositivo", raise_exception=True)
+@permission_required("devices.view_device", raise_exception=True)
 def dashboard(request):
     if request.user.is_superuser:
-        dispositivos = Dispositivo.objects.filter(deleted_at__isnull=True)
-        organizacion = None
+        devices = Device.objects.filter(deleted_at__isnull=True)
+        organization = None
     else:
-        organizacion = get_user_organization(request)
-        dispositivos = Dispositivo.objects.filter(
-            zona__departamento__organizacion=organizacion,
+        organization = get_user_organization(request)
+        devices = Device.objects.filter(
+            zone__department__organization=organization,
             deleted_at__isnull=True,
         )
 
-    dispositivos = dispositivos.select_related("zona", "categoria").order_by("nombre")
+    devices = devices.select_related("zone", "category", "manufacturer").order_by("name")
 
     # 1. Leer page_size desde la URL
     raw_size = request.GET.get("page_size")
@@ -46,7 +46,7 @@ def dashboard(request):
     page_size = request.session.get("device_page_size", 5)
 
     # 4. Paginar
-    paginator = Paginator(dispositivos, page_size)
+    paginator = Paginator(devices, page_size)
     page_obj = paginator.get_page(request.GET.get("page"))
 
     return render(
@@ -55,69 +55,69 @@ def dashboard(request):
         {
             "page_obj": page_obj,
             "page_size": page_size,
-            "organizacion": organizacion,
+            "organization": organization,
         },
     )
 
-class CategoriaPageContextMixin:
+class CategoryPageContextMixin:
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["categorias"] = Categoria.objects.all().order_by("nombre")
+        context["categories"] = Category.objects.all().order_by("name")
         context["open_modal"] = True
         return context
 
-class CategoriaListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
-    permission_required = "devices.view_categoria"
+class CategoryListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    permission_required = "devices.view_category"
     raise_exception = True
-    model = Categoria
-    template_name = "devices/categoria_list.html"
-    context_object_name = "categorias"
+    model = Category
+    template_name = "devices/category_list.html"
+    context_object_name = "categories"
 
     def get_queryset(self):
-        return Categoria.objects.all().order_by("nombre")
+        return Category.objects.all().order_by("name")
 
-class CategoriaCreateView(
+class CategoryCreateView(
     LoginRequiredMixin,
     PermissionRequiredMixin,
     SuccessMessageMixin,
-    CategoriaPageContextMixin,
+    CategoryPageContextMixin,
     CreateView,
 ):
-    permission_required = "devices.add_categoria"
+    permission_required = "devices.add_category"
     raise_exception = True
-    model = Categoria
-    form_class = CategoriaForm
-    template_name = "devices/categoria_list.html"
-    success_url = reverse_lazy("devices:categoria_list")
+    model = Category
+    form_class = CategoryForm
+    template_name = "devices/category_list.html"
+    success_url = reverse_lazy("devices:category_list")
     success_message = "Categoría creada correctamente."
 
 
-class CategoriaUpdateView(
+class CategoryUpdateView(
     LoginRequiredMixin,
     PermissionRequiredMixin,
     SuccessMessageMixin,
-    CategoriaPageContextMixin,
+    CategoryPageContextMixin,
     UpdateView,
 ):
-    permission_required = "devices.change_categoria"
+    permission_required = "devices.change_category"
     raise_exception = True
-    model = Categoria
-    form_class = CategoriaForm
-    template_name = "devices/categoria_list.html"
-    success_url = reverse_lazy("devices:categoria_list")
+    model = Category
+    form_class = CategoryForm
+    template_name = "devices/category_list.html"
+    success_url = reverse_lazy("devices:category_list")
     success_message = "Categoría actualizada correctamente."
 
-class CategoriaDeleteView(
+class CategoryDeleteView(
     LoginRequiredMixin,
     PermissionRequiredMixin,
     SuccessMessageMixin,
     DeleteView,
 ):
-    permission_required = "devices.delete_categoria"
+    permission_required = "devices.delete_category"
     raise_exception = True
-    model = Categoria
-    template_name = "devices/categoria_confirm_delete.html"
-    success_url = reverse_lazy("devices:categoria_list")
+    model = Category
+    template_name = "devices/category_confirm_delete.html"
+    success_url = reverse_lazy("devices:category_list")
     success_message = "Categoría eliminada correctamente."
 
     def post(self, request, *args, **kwargs):
@@ -129,7 +129,7 @@ class CategoriaDeleteView(
                 "No se puede eliminar esta categoría porque tiene "
                 "dispositivos asociados. Reasígnalos o elimínalos primero.",
             )
-            return redirect("devices:categoria_list")
+            return redirect("devices:category_list")
 
 
 # ---------------------------------------------------------------------------
@@ -142,57 +142,57 @@ def _delete_file_after_commit(storage, name):
         transaction.on_commit(lambda: storage.delete(name))
 
 
-class DispositivoScopedMixin:
+class DeviceScopedMixin:
     """Limita el queryset a la organización del usuario (superusuario: todo)."""
 
-    def get_organizacion(self):
+    def get_organization(self):
         return get_user_organization(self.request)
 
     def get_queryset(self):
-        qs = Dispositivo.objects.filter(deleted_at__isnull=True)
+        qs = Device.objects.filter(deleted_at__isnull=True)
         if self.request.user.is_superuser:
             return qs
-        return qs.filter(zona__departamento__organizacion=self.get_organizacion())
+        return qs.filter(zone__department__organization=self.get_organization())
 
 
-class DispositivoFormMixin(DispositivoScopedMixin):
-    model = Dispositivo
-    form_class = DispositivoForm
-    template_name = "devices/dispositivo_form.html"
+class DeviceFormMixin(DeviceScopedMixin):
+    model = Device
+    form_class = DeviceForm
+    template_name = "devices/device_form.html"
     success_url = reverse_lazy("devices:dashboard")
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["organizacion"] = self.get_organizacion()
+        kwargs["organization"] = self.get_organization()
         return kwargs
 
 
-class DispositivoCreateView(
+class DeviceCreateView(
     LoginRequiredMixin,
     PermissionRequiredMixin,
     SuccessMessageMixin,
-    DispositivoFormMixin,
+    DeviceFormMixin,
     CreateView,
 ):
-    permission_required = "devices.add_dispositivo"
+    permission_required = "devices.add_device"
     raise_exception = True
     success_message = "Dispositivo creado correctamente."
 
 
-class DispositivoUpdateView(
+class DeviceUpdateView(
     LoginRequiredMixin,
     PermissionRequiredMixin,
     SuccessMessageMixin,
-    DispositivoFormMixin,
+    DeviceFormMixin,
     UpdateView,
 ):
-    permission_required = "devices.change_dispositivo"
+    permission_required = "devices.change_device"
     raise_exception = True
     success_message = "Dispositivo actualizado correctamente."
 
     def form_valid(self, form):
         # Política: al reemplazar o limpiar la imagen, se elimina el archivo anterior.
-        old_file = Dispositivo.objects.get(pk=self.object.pk).image
+        old_file = Device.objects.get(pk=self.object.pk).image
         old_name, storage = old_file.name, old_file.storage
         response = super().form_valid(form)
         if old_name and old_name != self.object.image.name:
@@ -200,14 +200,14 @@ class DispositivoUpdateView(
         return response
 
 
-class DispositivoDeleteView(
+class DeviceDeleteView(
     LoginRequiredMixin,
     PermissionRequiredMixin,
     SuccessMessageMixin,
-    DispositivoScopedMixin,
+    DeviceScopedMixin,
     DeleteView,
 ):
-    permission_required = "devices.delete_dispositivo"
+    permission_required = "devices.delete_device"
     raise_exception = True
     http_method_names = ["post"]  # nunca se elimina por GET
     success_url = reverse_lazy("devices:dashboard")

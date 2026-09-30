@@ -5,11 +5,11 @@ app_name = "devices"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
-    path("dispositivos/new/", views.DispositivoCreateView.as_view(), name="dispositivo_create"),
-    path("dispositivos/<int:pk>/edit/", views.DispositivoUpdateView.as_view(), name="dispositivo_update"),
-    path("dispositivos/<int:pk>/delete/", views.DispositivoDeleteView.as_view(), name="dispositivo_delete"),
-    path("categorias/", views.CategoriaListView.as_view(), name="categoria_list"),
-    path("categorias/new/", views.CategoriaCreateView.as_view(), name="categoria_create"),
-    path("categorias/<int:pk>/edit/", views.CategoriaUpdateView.as_view(), name="categoria_update"),
-    path("categorias/<int:pk>/delete/", views.CategoriaDeleteView.as_view(), name="categoria_delete"),
+    path("devices/new/", views.DeviceCreateView.as_view(), name="device_create"),
+    path("devices/<int:pk>/edit/", views.DeviceUpdateView.as_view(), name="device_update"),
+    path("devices/<int:pk>/delete/", views.DeviceDeleteView.as_view(), name="device_delete"),
+    path("categories/", views.CategoryListView.as_view(), name="category_list"),
+    path("categories/new/", views.CategoryCreateView.as_view(), name="category_create"),
+    path("categories/<int:pk>/edit/", views.CategoryUpdateView.as_view(), name="category_update"),
+    path("categories/<int:pk>/delete/", views.CategoryDeleteView.as_view(), name="category_delete"),
 ]

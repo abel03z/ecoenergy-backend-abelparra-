@@ -1,55 +1,71 @@
 from django.contrib import admin, messages
 from django.utils import timezone
+
 from core.admin_filters import OrgScopedListFilter
 from core.admin_utils import get_user_organization
-from organizations.models import Zona
-from .models import Categoria, Dispositivo
+from organizations.models import Zone
+
+from .models import Category, Device, DeviceAssignment, Manufacturer
 
 
-class DispositivoZonaFilter(OrgScopedListFilter):
+class DeviceZoneFilter(OrgScopedListFilter):
     title = "zona"
-    parameter_name = "zona"
-    related_model = Zona
-    related_field_lookup = "departamento__organizacion"
+    parameter_name = "zone"
+    related_model = Zone
+    related_field_lookup = "department__organization"
 
 
-@admin.register(Categoria)
-class CategoriaAdmin(admin.ModelAdmin):
-    list_display = ("nombre",)
-    search_fields = ("nombre",)
-    ordering = ("nombre",)
+class AssignmentDeviceFilter(OrgScopedListFilter):
+    title = "dispositivo"
+    parameter_name = "device"
+    related_model = Device
+    related_field_lookup = "zone__department__organization"
+
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
+    ordering = ("name",)
+
+
+@admin.register(Manufacturer)
+class ManufacturerAdmin(admin.ModelAdmin):
+    list_display = ("name", "country")
+    search_fields = ("name", "country")
+    ordering = ("name",)
 
 
 @admin.action(description="Archivar dispositivos seleccionados", permissions=["change"])
-def archive_dispositivos(modeladmin, request, queryset):
+def archive_devices(modeladmin, request, queryset):
     updated = queryset.filter(deleted_at__isnull=True).update(deleted_at=timezone.now())
     modeladmin.message_user(
         request, f"{updated} dispositivo(s) archivado(s).", level=messages.SUCCESS
     )
 
 
-@admin.register(Dispositivo)
-class DispositivoAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "categoria", "zona")
-    search_fields = ("nombre", "categoria__nombre", "zona__nombre")
-    list_filter = ("categoria", DispositivoZonaFilter)
-    ordering = ("zona__nombre", "nombre")
-    list_select_related = ("categoria", "zona")
-    actions = [archive_dispositivos]
+@admin.register(Device)
+class DeviceAdmin(admin.ModelAdmin):
+    list_display = ("name", "category", "manufacturer", "zone", "is_active")
+    search_fields = ("name", "category__name", "manufacturer__name", "zone__name")
+    list_filter = ("category", "manufacturer", DeviceZoneFilter)
+    ordering = ("zone__name", "name")
+    list_select_related = ("category", "manufacturer", "zone")
+    actions = [archive_devices]
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         qs = qs.filter(deleted_at__isnull=True)
         if request.user.is_superuser:
             return qs
-        organizacion = get_user_organization(request)
-        return qs.filter(zona__departamento__organizacion=organizacion)
+        organization = get_user_organization(request)
+        return qs.filter(zone__department__organization=organization)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "zona" and not request.user.is_superuser:
-            organizacion = get_user_organization(request)
-            kwargs["queryset"] = Zona.objects.filter(
-                departamento__organizacion=organizacion,
+        if db_field.name == "zone" and not request.user.is_superuser:
+            organization = get_user_organization(request)
+            kwargs["queryset"] = Zone.objects.filter(
+                department__organization=organization,
                 deleted_at__isnull=True,
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
@@ -60,8 +76,43 @@ class DispositivoAdmin(admin.ModelAdmin):
             return False
         if obj is None or request.user.is_superuser:
             return True
-        organizacion = get_user_organization(request)
-        return obj.zona.departamento.organizacion_id == organizacion.id
+        organization = get_user_organization(request)
+        return obj.zone.department.organization_id == organization.id
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(DeviceAssignment)
+class DeviceAssignmentAdmin(admin.ModelAdmin):
+    list_display = ("device", "user", "assigned_at", "released_at")
+    search_fields = ("device__name", "user__username")
+    list_filter = (AssignmentDeviceFilter,)
+    ordering = ("-assigned_at",)
+    date_hierarchy = "assigned_at"
+    list_select_related = ("device", "user")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        qs = qs.filter(deleted_at__isnull=True)
+        if request.user.is_superuser:
+            return qs
+        organization = get_user_organization(request)
+        return qs.filter(device__zone__department__organization=organization)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "device" and not request.user.is_superuser:
+            organization = get_user_organization(request)
+            kwargs["queryset"] = Device.objects.filter(
+                zone__department__organization=organization,
+                deleted_at__isnull=True,
+            )
+        if db_field.name == "user" and not request.user.is_superuser:
+            organization = get_user_organization(request)
+            kwargs["queryset"] = db_field.related_model.objects.filter(
+                profile__organization=organization
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def has_delete_permission(self, request, obj=None):
         return False

@@ -1,42 +1,45 @@
 from django.contrib import admin
+
 from core.admin_filters import OrgScopedListFilter
 from core.admin_utils import get_user_organization
-from .models import Organizacion, Departamento, Zona
 
-class DepartamentoInline(admin.TabularInline):
-    model = Departamento
+from .models import Department, Organization, Zone
+
+
+class DepartmentInline(admin.TabularInline):
+    model = Department
     extra = 0
-    fields = ("nombre",)
+    fields = ("name",)
     show_change_link = True
 
 
-class DepartamentoOrganizacionFilter(OrgScopedListFilter):
+class DepartmentOrganizationFilter(OrgScopedListFilter):
     title = "organización"
-    parameter_name = "organizacion"
-    related_model = Organizacion
+    parameter_name = "organization"
+    related_model = Organization
     related_field_lookup = None
 
 
-class ZonaDepartamentoFilter(OrgScopedListFilter):
+class ZoneDepartmentFilter(OrgScopedListFilter):
     title = "departamento"
-    parameter_name = "departamento"
-    related_model = Departamento
-    related_field_lookup = "organizacion"
+    parameter_name = "department"
+    related_model = Department
+    related_field_lookup = "organization"
 
 
-@admin.register(Organizacion)
-class OrganizacionAdmin(admin.ModelAdmin):
-    list_display = ("nombre",)
-    search_fields = ("nombre",)
-    ordering = ("nombre",)
-    inlines = [DepartamentoInline]
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
+    ordering = ("name",)
+    inlines = [DepartmentInline]
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
             return qs
-        organizacion = get_user_organization(request)
-        return qs.filter(pk=organizacion.id)
+        organization = get_user_organization(request)
+        return qs.filter(pk=organization.id)
 
     def has_change_permission(self, request, obj=None):
         allowed = super().has_change_permission(request, obj)
@@ -44,32 +47,32 @@ class OrganizacionAdmin(admin.ModelAdmin):
             return False
         if obj is None or request.user.is_superuser:
             return True
-        organizacion = get_user_organization(request)
-        return obj.id == organizacion.id
+        organization = get_user_organization(request)
+        return obj.id == organization.id
 
     def has_delete_permission(self, request, obj=None):
         return False
 
 
-@admin.register(Departamento)
-class DepartamentoAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "organizacion")
-    search_fields = ("nombre", "organizacion__nombre")
-    list_filter = (DepartamentoOrganizacionFilter,)
-    ordering = ("organizacion__nombre", "nombre")
-    list_select_related = ("organizacion",)
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    list_display = ("name", "organization")
+    search_fields = ("name", "organization__name")
+    list_filter = (DepartmentOrganizationFilter,)
+    ordering = ("organization__name", "name")
+    list_select_related = ("organization",)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
             return qs
-        organizacion = get_user_organization(request)
-        return qs.filter(organizacion=organizacion)
+        organization = get_user_organization(request)
+        return qs.filter(organization=organization)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "organizacion" and not request.user.is_superuser:
-            organizacion = get_user_organization(request)
-            kwargs["queryset"] = Organizacion.objects.filter(pk=organizacion.id)
+        if db_field.name == "organization" and not request.user.is_superuser:
+            organization = get_user_organization(request)
+            kwargs["queryset"] = Organization.objects.filter(pk=organization.id)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def has_change_permission(self, request, obj=None):
@@ -78,32 +81,32 @@ class DepartamentoAdmin(admin.ModelAdmin):
             return False
         if obj is None or request.user.is_superuser:
             return True
-        organizacion = get_user_organization(request)
-        return obj.organizacion_id == organizacion.id
+        organization = get_user_organization(request)
+        return obj.organization_id == organization.id
 
     def has_delete_permission(self, request, obj=None):
         return False
 
 
-@admin.register(Zona)
-class ZonaAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "departamento", "limite_consumo")
-    search_fields = ("nombre", "departamento__nombre")
-    list_filter = (ZonaDepartamentoFilter,)
-    ordering = ("departamento__nombre", "nombre")
-    list_select_related = ("departamento",)
+@admin.register(Zone)
+class ZoneAdmin(admin.ModelAdmin):
+    list_display = ("name", "department", "consumption_limit")
+    search_fields = ("name", "department__name")
+    list_filter = (ZoneDepartmentFilter,)
+    ordering = ("department__name", "name")
+    list_select_related = ("department",)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
             return qs
-        organizacion = get_user_organization(request)
-        return qs.filter(departamento__organizacion=organizacion)
+        organization = get_user_organization(request)
+        return qs.filter(department__organization=organization)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "departamento" and not request.user.is_superuser:
-            organizacion = get_user_organization(request)
-            kwargs["queryset"] = Departamento.objects.filter(organizacion=organizacion)
+        if db_field.name == "department" and not request.user.is_superuser:
+            organization = get_user_organization(request)
+            kwargs["queryset"] = Department.objects.filter(organization=organization)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def has_change_permission(self, request, obj=None):
@@ -112,8 +115,8 @@ class ZonaAdmin(admin.ModelAdmin):
             return False
         if obj is None or request.user.is_superuser:
             return True
-        organizacion = get_user_organization(request)
-        return obj.departamento.organizacion_id == organizacion.id
+        organization = get_user_organization(request)
+        return obj.department.organization_id == organization.id
 
     def has_delete_permission(self, request, obj=None):
         return False

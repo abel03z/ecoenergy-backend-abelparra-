@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Categorías · EcoEnergy{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Categorías</h1>
+    {% if perms.devices.add_category %}
+    <a href="{% url 'devices:category_create' %}" class="btn btn-primary">
+        Nueva categoría
+    </a>
+    {% endif %}
+</div>
+
+<table class="table table-hover align-middle">
+    <thead class="table-light">
+        <tr>
+            <th>Nombre</th>
+            <th class="text-end">Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for category in categories %}
+        <tr>
+            <td>{{ category.name }}</td>
+            <td class="text-end">
+                {% if perms.devices.change_category %}
+                <a href="{% url 'devices:category_update' category.pk %}" class="btn btn-sm btn-outline-primary">
+                    Editar
+                </a>
+                {% endif %}
+                {% if perms.devices.delete_category %}
+                <a href="{% url 'devices:category_delete' category.pk %}" class="btn btn-sm btn-outline-danger">
+                    Eliminar
+                </a>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="2" class="text-center text-muted py-4">
+                No hay categorías registradas.
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if form %}
+    {% include "devices/_category_form_modal.html" %}
+{% endif %}
+{% endblock %}

@@ -1,47 +1,36 @@
+from django.core.validators import MinValueValidator
 from django.db import models
+
 from core.models import BaseModel
 
 
-class Organizacion(BaseModel):
-    nombre = models.CharField(max_length=150)
+class Organization(BaseModel):
+    name = models.CharField(max_length=150)
 
     def __str__(self):
-        return self.nombre
+        return self.name
 
 
-class Departamento(BaseModel):
-    organizacion = models.ForeignKey(
-        Organizacion,
+class Department(BaseModel):
+    organization = models.ForeignKey(
+        Organization,
         on_delete=models.PROTECT,
-        related_name="departamentos",
+        related_name="departments",
     )
-    nombre = models.CharField(max_length=100)
+    name = models.CharField(max_length=100)
 
     def __str__(self):
-        return self.nombre
+        return self.name
 
 
-class Zona(BaseModel):
-    departamento = models.ForeignKey(
-        Departamento,
+class Zone(BaseModel):
+    department = models.ForeignKey(
+        Department,
         on_delete=models.PROTECT,
-        related_name="zonas",
+        related_name="zones",
     )
-    nombre = models.CharField(max_length=100)
-    limite_consumo = models.FloatField()
+    name = models.CharField(max_length=100)
+    consumption_limit = models.FloatField(validators=[MinValueValidator(0)])
 
     def __str__(self):
-        return self.nombre
-
-
-class Usuario(BaseModel):
-    departamento = models.ForeignKey(
-        Departamento,
-        on_delete=models.PROTECT,
-        related_name="usuarios",
-    )
-    nombre = models.CharField(max_length=100)
-    rol = models.CharField(max_length=50)
-
-    def __str__(self):
-        return self.nombre
+        return self.name
