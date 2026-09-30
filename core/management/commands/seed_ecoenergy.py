@@ -38,7 +38,7 @@ GROUP_PERMS = {
         ("organizations", "organization", ["add", "change", "view"]),
         ("organizations", "department", ["add", "change", "view"]),
         ("organizations", "zone", ["add", "change", "view"]),
-        ("devices", "category", ["add", "change", "view"]),
+        ("devices", "category", ["add", "change", "delete", "view"]),
         ("devices", "device", ["add", "change", "delete", "view"]),
     ],
     "Operador": [
@@ -88,18 +88,18 @@ class Command(BaseCommand):
     def _reset(self):
         self.stdout.write("Borrando datos de prueba anteriores...")
         # Los FK usan on_delete=PROTECT, así que hay que borrar de hijos a padres.
-        orgs = Organization.objects.filter(name__in=["EcoEnergy Norte", "EcoEnergy Sur"])
-        departments = Department.objects.filter(organization__in=orgs)
-        zones = Zone.objects.filter(department__in=departments)
-        devices = Device.objects.filter(zone__in=zones)
-        Measurement.objects.filter(device__in=devices).delete()
-        Alert.objects.filter(device__in=devices).delete()
-        Maintenance.objects.filter(device__in=devices).delete()
-        DeviceAssignment.objects.filter(device__in=devices).delete()
+        orgs = Organization.all_objects.filter(name__in=["EcoEnergy Norte", "EcoEnergy Sur"])
+        departments = Department.all_objects.filter(organization__in=orgs)
+        zones = Zone.all_objects.filter(department__in=departments)
+        devices = Device.all_objects.filter(zone__in=zones)
+        Measurement.all_objects.filter(device__in=devices).delete()
+        Alert.all_objects.filter(device__in=devices).delete()
+        Maintenance.all_objects.filter(device__in=devices).delete()
+        DeviceAssignment.all_objects.filter(device__in=devices).delete()
         User.objects.filter(username__in=TEST_USERNAMES).delete()
         devices.delete()
-        Category.objects.filter(name__in=["Medidor eléctrico", "Sensor de temperatura"]).delete()
-        Manufacturer.objects.filter(name__in=["Schneider Electric", "Siemens"]).delete()
+        Category.all_objects.filter(name__in=["Medidor eléctrico", "Sensor de temperatura"]).delete()
+        Manufacturer.all_objects.filter(name__in=["Schneider Electric", "Siemens"]).delete()
         zones.delete()
         departments.delete()
         orgs.delete()

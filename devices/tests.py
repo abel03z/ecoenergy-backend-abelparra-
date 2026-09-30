@@ -141,15 +141,33 @@ class DeviceImageTests(TestCase):
         self.assertEqual(disp.image.name, antigua)
         self.assertEqual(len(media_files()), 1)
 
-    def test_eliminar_borra_registro_y_archivo(self):
+    def test_eliminar_es_borrado_logico_y_conserva_archivo(self):
         self.client.post(reverse("devices:device_create"),
                          self._payload(image=make_image()))
         disp = Device.objects.get()
         with self.captureOnCommitCallbacks(execute=True):
             r = self.client.post(reverse("devices:device_delete", args=[disp.pk]))
         self.assertRedirects(r, reverse("devices:dashboard"))
-        self.assertFalse(Device.objects.exists())
-        self.assertEqual(media_files(), [])
+        # ya no aparece en consultas normales...
+        self.assertFalse(Device.objects.filter(pk=disp.pk).exists())
+        # ...pero la fila sigue en la BD con deleted_at y la imagen se conserva
+        fila = Device.all_objects.get(pk=disp.pk)
+        self.assertIsNotNone(fila.deleted_at)
+        self.assertEqual(len(media_files()), 1)
+
+    def test_dispositivo_eliminado_no_aparece_en_el_listado(self):
+        disp = Device.objects.create(name="Fantasma", zone=self.zona_norte,
+                                     category=self.categoria, manufacturer=self.fabricante)
+        self.assertContains(self.client.get(reverse("devices:dashboard")), "Fantasma")
+        self.client.post(reverse("devices:device_delete", args=[disp.pk]))
+        self.assertNotContains(self.client.get(reverse("devices:dashboard")), "Fantasma")
+
+    def test_dispositivo_eliminado_no_se_puede_editar(self):
+        disp = Device.objects.create(name="X", zone=self.zona_norte,
+                                     category=self.categoria, manufacturer=self.fabricante)
+        self.client.post(reverse("devices:device_delete", args=[disp.pk]))
+        r = self.client.get(reverse("devices:device_update", args=[disp.pk]))
+        self.assertEqual(r.status_code, 404)
 
     # --- POST, permisos y scoping ----------------------------------------
     def test_eliminar_por_get_no_esta_permitido(self):
@@ -195,3 +213,101 @@ class DeviceImageTests(TestCase):
         r = c.post(reverse("devices:device_delete", args=[disp.pk]))
         self.assertEqual(r.status_code, 403)
         self.assertTrue(Device.objects.filter(pk=disp.pk).exists())
+
+
+class CategorySoftDeleteTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        org = Organization.objects.create(name="Org")
+        dept = Department.objects.create(organization=org, name="D")
+        cls.zone = Zone.objects.create(department=dept, name="Z", consumption_limit=10)
+        cls.maker = Manufacturer.objects.create(name="Acme")
+
+        full = Group.objects.create(name="Admin categorías")
+        for action in ("add", "change", "delete", "view"):
+            full.permissions.add(Permission.objects.get(codename=f"{action}_category"))
+        only_view = Group.objects.create(name="Lector categorías")
+        only_view.permissions.add(Permission.objects.get(codename="view_category"))
+
+        cls.admin = User.objects.create_user("cat_admin", password="x")
+        cls.admin.groups.add(full)
+        cls.reader = User.objects.create_user("cat_reader", password="x")
+        cls.reader.groups.add(only_view)
+
+    def setUp(self):
+        self.client.force_login(self.admin)
+
+    def test_eliminar_categoria_es_borrado_logico(self):
+        cat = Category.objects.create(name="Temporal")
+        r = self.client.post(reverse("devices:category_delete", args=[cat.pk]))
+        self.assertRedirects(r, reverse("devices:category_list"))
+        self.assertFalse(Category.objects.filter(pk=cat.pk).exists())
+        self.assertIsNotNone(Category.all_objects.get(pk=cat.pk).deleted_at)
+        self.assertNotContains(self.client.get(reverse("devices:category_list")), "Temporal")
+
+    def test_no_elimina_categoria_con_dispositivos_vivos(self):
+        cat = Category.objects.create(name="En uso")
+        Device.objects.create(name="D1", zone=self.zone, category=cat, manufacturer=self.maker)
+        self.client.post(reverse("devices:category_delete", args=[cat.pk]))
+        self.assertTrue(Category.objects.filter(pk=cat.pk).exists())
+
+    def test_eliminar_categoria_por_get_no_esta_permitido(self):
+        cat = Category.objects.create(name="Temporal")
+        r = self.client.get(reverse("devices:category_delete", args=[cat.pk]))
+        self.assertEqual(r.status_code, 405)
+        self.assertTrue(Category.objects.filter(pk=cat.pk).exists())
+
+    def test_eliminar_categoria_sin_permiso_devuelve_403(self):
+        cat = Category.objects.create(name="Temporal")
+        self.client.force_login(self.reader)
+        r = self.client.post(reverse("devices:category_delete", args=[cat.pk]))
+        self.assertEqual(r.status_code, 403)
+        self.assertTrue(Category.objects.filter(pk=cat.pk).exists())
+
+    def test_nombre_de_categoria_eliminada_se_puede_reutilizar(self):
+        cat = Category.objects.create(name="Reutilizable")
+        self.client.post(reverse("devices:category_delete", args=[cat.pk]))
+        r = self.client.post(reverse("devices:category_create"), {"name": "Reutilizable"})
+        self.assertRedirects(r, reverse("devices:category_list"))
+
+
+class PaginationSessionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        Organization.objects.create(name="Org")
+        group = Group.objects.create(name="Lectores")
+        group.permissions.add(Permission.objects.get(codename="view_category"))
+        cls.user = User.objects.create_user("pager", password="x")
+        cls.user.groups.add(group)
+        for i in range(40):
+            Category.objects.create(name=f"Categoría {i:02d}")
+
+    def setUp(self):
+        self.client.force_login(self.user)
+        self.url = reverse("devices:category_list")
+
+    def test_por_defecto_son_5_por_pagina(self):
+        r = self.client.get(self.url)
+        self.assertEqual(len(r.context["page_obj"]), 5)
+
+    def test_tamanos_permitidos_5_15_30(self):
+        for size in (5, 15, 30):
+            r = self.client.get(self.url, {"page_size": size})
+            self.assertEqual(len(r.context["page_obj"]), size)
+
+    def test_la_seleccion_persiste_en_la_sesion(self):
+        self.client.get(self.url, {"page_size": 15})
+        self.assertEqual(self.client.session["page_size"], 15)
+        r = self.client.get(self.url)  # sin parámetro
+        self.assertEqual(len(r.context["page_obj"]), 15)
+
+    def test_valores_no_permitidos_se_normalizan(self):
+        self.client.get(self.url, {"page_size": 15})
+        for raw in ("10", "9999", "-5", "abc", "0"):
+            r = self.client.get(self.url, {"page_size": raw})
+            self.assertEqual(len(r.context["page_obj"]), 15, raw)
+        self.assertEqual(self.client.session["page_size"], 15)
+
+    def test_valor_invalido_sin_preferencia_usa_el_defecto(self):
+        r = self.client.get(self.url, {"page_size": "9999"})
+        self.assertEqual(len(r.context["page_obj"]), 5)

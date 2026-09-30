@@ -1,0 +1,26 @@
+<script>
+document.querySelectorAll(".js-delete").forEach(button => {
+    button.addEventListener("click", async (event) => {
+        const itemName = button.dataset.itemName || "el registro";
+        const entity = button.dataset.entity || "registro";
+        if (!window.Swal) {
+            if (!window.confirm("¿Eliminar " + itemName + "?")) {
+                event.preventDefault();
+            }
+            return;
+        }
+        event.preventDefault();
+        const result = await Swal.fire({
+            title: "¿Eliminar " + entity + "?",
+            text: itemName + " dejará de mostrarse en los listados.",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Sí, eliminar",
+            cancelButtonText: "Cancelar",
+        });
+        if (result.isConfirmed) {
+            button.form.requestSubmit();
+        }
+    });
+});
+</script>
