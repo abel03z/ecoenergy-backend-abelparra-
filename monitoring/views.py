@@ -1,14 +1,30 @@
+from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
+from django.http import HttpResponse
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
 from core.admin_utils import get_user_organization
 from core.pagination import paginate
 from core.views import SoftDeleteMixin
 
+from .exports import XLSX_CONTENT_TYPE, build_maintenance_workbook
 from .forms import MaintenanceForm
 from .models import Maintenance
+
+
+def scoped_maintenances(request):
+    """
+    Mantenciones visibles para el usuario: sin eliminadas lógicamente
+    (Maintenance.objects) y solo de su organización (superusuario: todas).
+    Lo usan el listado, las vistas de edición/eliminación y la exportación a Excel.
+    """
+    qs = Maintenance.objects.select_related("device", "technician")
+    if not request.user.is_superuser:
+        qs = qs.filter(device__zone__department__organization=get_user_organization(request))
+    return qs.order_by("-scheduled_at", "pk")
 
 
 class MaintenanceScopedMixin:
@@ -20,11 +36,7 @@ class MaintenanceScopedMixin:
         return get_user_organization(self.request)
 
     def get_queryset(self):
-        # Maintenance.objects ya excluye las mantenciones eliminadas lógicamente.
-        qs = Maintenance.objects.select_related("device", "technician")
-        if not self.request.user.is_superuser:
-            qs = qs.filter(device__zone__department__organization=self.get_organization())
-        return qs.order_by("-scheduled_at", "pk")
+        return scoped_maintenances(self.request)
 
 
 class MaintenanceListView(
@@ -92,3 +104,14 @@ class MaintenanceDeleteView(
     permission_required = "monitoring.delete_maintenance"
     success_url = reverse_lazy("monitoring:maintenance_list")
     success_message = "Mantención eliminada correctamente."
+
+
+@login_required
+@permission_required("monitoring.view_maintenance", raise_exception=True)
+def maintenance_export(request):
+    """Descarga .xlsx con las mantenciones que el usuario puede ver."""
+    content = build_maintenance_workbook(scoped_maintenances(request))
+    filename = f"mantenciones_{timezone.localtime():%Y%m%d_%H%M}.xlsx"
+    response = HttpResponse(content, content_type=XLSX_CONTENT_TYPE)
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
