@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import ProtectedError
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
@@ -10,7 +11,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 
 from core.admin_utils import get_user_organization
 from .models import Categoria, Dispositivo
-from .forms import CategoriaForm
+from .forms import CategoriaForm, DispositivoForm
 
 ALLOWED_PAGE_SIZES = {5, 10, 15}
 
@@ -129,3 +130,102 @@ class CategoriaDeleteView(
                 "dispositivos asociados. Reasígnalos o elimínalos primero.",
             )
             return redirect("devices:categoria_list")
+
+
+# ---------------------------------------------------------------------------
+# Clase 8 · CRUD de Dispositivo con imagen (scoping por organización)
+# ---------------------------------------------------------------------------
+
+def _delete_file_after_commit(storage, name):
+    """Borra un archivo del storage solo si la transacción termina bien."""
+    if name:
+        transaction.on_commit(lambda: storage.delete(name))
+
+
+class DispositivoScopedMixin:
+    """Limita el queryset a la organización del usuario (superusuario: todo)."""
+
+    def get_organizacion(self):
+        return get_user_organization(self.request)
+
+    def get_queryset(self):
+        qs = Dispositivo.objects.filter(deleted_at__isnull=True)
+        if self.request.user.is_superuser:
+            return qs
+        return qs.filter(zona__departamento__organizacion=self.get_organizacion())
+
+
+class DispositivoFormMixin(DispositivoScopedMixin):
+    model = Dispositivo
+    form_class = DispositivoForm
+    template_name = "devices/dispositivo_form.html"
+    success_url = reverse_lazy("devices:dashboard")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["organizacion"] = self.get_organizacion()
+        return kwargs
+
+
+class DispositivoCreateView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    SuccessMessageMixin,
+    DispositivoFormMixin,
+    CreateView,
+):
+    permission_required = "devices.add_dispositivo"
+    raise_exception = True
+    success_message = "Dispositivo creado correctamente."
+
+
+class DispositivoUpdateView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    SuccessMessageMixin,
+    DispositivoFormMixin,
+    UpdateView,
+):
+    permission_required = "devices.change_dispositivo"
+    raise_exception = True
+    success_message = "Dispositivo actualizado correctamente."
+
+    def form_valid(self, form):
+        # Política: al reemplazar o limpiar la imagen, se elimina el archivo anterior.
+        old_file = Dispositivo.objects.get(pk=self.object.pk).image
+        old_name, storage = old_file.name, old_file.storage
+        response = super().form_valid(form)
+        if old_name and old_name != self.object.image.name:
+            _delete_file_after_commit(storage, old_name)
+        return response
+
+
+class DispositivoDeleteView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    SuccessMessageMixin,
+    DispositivoScopedMixin,
+    DeleteView,
+):
+    permission_required = "devices.delete_dispositivo"
+    raise_exception = True
+    http_method_names = ["post"]  # nunca se elimina por GET
+    success_url = reverse_lazy("devices:dashboard")
+    success_message = "Dispositivo eliminado correctamente."
+
+    def form_valid(self, form):
+        image = self.object.image
+        name, storage = image.name, image.storage
+        try:
+            response = super().form_valid(form)
+        except ProtectedError:
+            messages.error(
+                self.request,
+                "No se puede eliminar este dispositivo porque tiene "
+                "registros asociados.",
+            )
+            return redirect("devices:dashboard")
+        # Política: al eliminar el registro, se elimina también su archivo.
+        _delete_file_after_commit(storage, name)
+        return response
+

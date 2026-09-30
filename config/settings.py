@@ -138,6 +138,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Archivos subidos por usuarios (solo desarrollo; en producción los entrega Nginx/S3)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 # Autenticación y sesiones
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "devices:dashboard"
