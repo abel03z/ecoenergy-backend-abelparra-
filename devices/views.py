@@ -2,52 +2,31 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
-from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import ProtectedError
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 
 from core.admin_utils import get_user_organization
+from core.pagination import paginate
+from core.views import SoftDeleteMixin
 from .models import Category, Device
 from .forms import CategoryForm, DeviceForm
-
-ALLOWED_PAGE_SIZES = {5, 10, 15}
 
 
 @login_required
 @permission_required("devices.view_device", raise_exception=True)
 def dashboard(request):
+    # Device.objects ya excluye los eliminados lógicamente.
     if request.user.is_superuser:
-        devices = Device.objects.filter(deleted_at__isnull=True)
+        devices = Device.objects.all()
         organization = None
     else:
         organization = get_user_organization(request)
-        devices = Device.objects.filter(
-            zone__department__organization=organization,
-            deleted_at__isnull=True,
-        )
+        devices = Device.objects.filter(zone__department__organization=organization)
 
     devices = devices.select_related("zone", "category", "manufacturer").order_by("name")
-
-    # 1. Leer page_size desde la URL
-    raw_size = request.GET.get("page_size")
-    if raw_size:
-        try:
-            selected_size = int(raw_size)
-        except ValueError:
-            selected_size = 5
-        # 2. Guardar solamente tamaños permitidos
-        if selected_size in ALLOWED_PAGE_SIZES:
-            request.session["device_page_size"] = selected_size
-
-    # 3. Recuperar preferencia desde la sesión
-    page_size = request.session.get("device_page_size", 5)
-
-    # 4. Paginar
-    paginator = Paginator(devices, page_size)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    page_obj, page_size, page_sizes = paginate(request, devices)
 
     return render(
         request,
@@ -55,26 +34,42 @@ def dashboard(request):
         {
             "page_obj": page_obj,
             "page_size": page_size,
+            "page_sizes": page_sizes,
             "organization": organization,
         },
     )
 
+
 class CategoryPageContextMixin:
+    """Agrega al contexto el listado paginado de categorías (tabla + modal)."""
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["categories"] = Category.objects.all().order_by("name")
-        context["open_modal"] = True
+        page_obj, page_size, page_sizes = paginate(
+            self.request, Category.objects.order_by("name")
+        )
+        context.update(
+            {
+                "categories": page_obj,
+                "page_obj": page_obj,
+                "page_size": page_size,
+                "page_sizes": page_sizes,
+            }
+        )
         return context
 
-class CategoryListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+
+class CategoryListView(
+    LoginRequiredMixin, PermissionRequiredMixin, CategoryPageContextMixin, ListView
+):
     permission_required = "devices.view_category"
     raise_exception = True
     model = Category
     template_name = "devices/category_list.html"
-    context_object_name = "categories"
 
     def get_queryset(self):
-        return Category.objects.all().order_by("name")
+        return Category.objects.order_by("name")
+
 
 class CategoryCreateView(
     LoginRequiredMixin,
@@ -90,6 +85,11 @@ class CategoryCreateView(
     template_name = "devices/category_list.html"
     success_url = reverse_lazy("devices:category_list")
     success_message = "Categoría creada correctamente."
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["open_modal"] = True
+        return context
 
 
 class CategoryUpdateView(
@@ -107,29 +107,32 @@ class CategoryUpdateView(
     success_url = reverse_lazy("devices:category_list")
     success_message = "Categoría actualizada correctamente."
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["open_modal"] = True
+        return context
+
+
 class CategoryDeleteView(
     LoginRequiredMixin,
     PermissionRequiredMixin,
-    SuccessMessageMixin,
+    SoftDeleteMixin,
     DeleteView,
 ):
     permission_required = "devices.delete_category"
     raise_exception = True
     model = Category
-    template_name = "devices/category_confirm_delete.html"
     success_url = reverse_lazy("devices:category_list")
     success_message = "Categoría eliminada correctamente."
 
-    def post(self, request, *args, **kwargs):
-        try:
-            return super().post(request, *args, **kwargs)
-        except ProtectedError:
-            messages.error(
-                request,
+    def can_soft_delete(self):
+        # Device.objects solo cuenta dispositivos vivos.
+        if self.object.devices.exists():
+            return False, (
                 "No se puede eliminar esta categoría porque tiene "
-                "dispositivos asociados. Reasígnalos o elimínalos primero.",
+                "dispositivos asociados. Reasígnalos o elimínalos primero."
             )
-            return redirect("devices:category_list")
+        return True, ""
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +152,7 @@ class DeviceScopedMixin:
         return get_user_organization(self.request)
 
     def get_queryset(self):
-        qs = Device.objects.filter(deleted_at__isnull=True)
+        qs = Device.objects.all()
         if self.request.user.is_superuser:
             return qs
         return qs.filter(zone__department__organization=self.get_organization())
@@ -203,29 +206,12 @@ class DeviceUpdateView(
 class DeviceDeleteView(
     LoginRequiredMixin,
     PermissionRequiredMixin,
-    SuccessMessageMixin,
     DeviceScopedMixin,
+    SoftDeleteMixin,
     DeleteView,
 ):
     permission_required = "devices.delete_device"
     raise_exception = True
-    http_method_names = ["post"]  # nunca se elimina por GET
     success_url = reverse_lazy("devices:dashboard")
     success_message = "Dispositivo eliminado correctamente."
-
-    def form_valid(self, form):
-        image = self.object.image
-        name, storage = image.name, image.storage
-        try:
-            response = super().form_valid(form)
-        except ProtectedError:
-            messages.error(
-                self.request,
-                "No se puede eliminar este dispositivo porque tiene "
-                "registros asociados.",
-            )
-            return redirect("devices:dashboard")
-        # Política: al eliminar el registro, se elimina también su archivo.
-        _delete_file_after_commit(storage, name)
-        return response
-
+    # Borrado lógico: el registro y su imagen se conservan (se puede restaurar).

@@ -28,9 +28,11 @@
                 </a>
                 {% endif %}
                 {% if perms.devices.delete_category %}
-                <a href="{% url 'devices:category_delete' category.pk %}" class="btn btn-sm btn-outline-danger">
-                    Eliminar
-                </a>
+                <form method="post" action="{% url 'devices:category_delete' category.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger js-delete"
+                            data-item-name="{{ category.name }}" data-entity="categoría">Eliminar</button>
+                </form>
                 {% endif %}
             </td>
         </tr>
@@ -44,7 +46,13 @@
     </tbody>
 </table>
 
+{% include "includes/pagination.html" %}
+
 {% if form %}
     {% include "devices/_category_form_modal.html" %}
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% include "includes/sweetalert_delete.html" %}
 {% endblock %}
