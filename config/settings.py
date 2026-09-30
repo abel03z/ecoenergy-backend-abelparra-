@@ -157,3 +157,6 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+PASSWORD_RESET_CODE_TTL = 120       # segundos de vigencia del código
+PASSWORD_RESET_MAX_ATTEMPTS = 5     # intentos fallidos permitidos

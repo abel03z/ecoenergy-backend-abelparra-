@@ -41,3 +41,18 @@ class UserProfile(BaseModel):
                     "a la organización seleccionada."
                 )
             })
+
+
+class PasswordResetCode(BaseModel):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="password_reset_codes",
+    )
+    code_hash = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+
+    def __str__(self):
+        return f"Código de {self.user} (usado={self.used})"
