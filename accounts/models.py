@@ -11,13 +11,13 @@ class UserProfile(BaseModel):
         on_delete=models.CASCADE,
         related_name="profile",
     )
-    organizacion = models.ForeignKey(
-        "organizations.Organizacion",
+    organization = models.ForeignKey(
+        "organizations.Organization",
         on_delete=models.PROTECT,
         related_name="user_profiles",
     )
-    departamento = models.ForeignKey(
-        "organizations.Departamento",
+    department = models.ForeignKey(
+        "organizations.Department",
         on_delete=models.PROTECT,
         related_name="user_profiles",
         null=True,
@@ -27,16 +27,16 @@ class UserProfile(BaseModel):
     phone = models.CharField(max_length=20, blank=True)
 
     def __str__(self):
-        return f"{self.user.username} · {self.organizacion}"
+        return f"{self.user.username} · {self.organization}"
 
     def clean(self):
         super().clean()
         if (
-            self.departamento_id
-            and self.departamento.organizacion_id != self.organizacion_id
+            self.department_id
+            and self.department.organization_id != self.organization_id
         ):
             raise ValidationError({
-                "departamento": (
+                "department": (
                     "El departamento debe pertenecer "
                     "a la organización seleccionada."
                 )

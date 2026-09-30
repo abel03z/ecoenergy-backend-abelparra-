@@ -4,67 +4,75 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_image_file_extension
 
-from organizations.models import Zona
-from .models import Categoria, Dispositivo
+from organizations.models import Zone
+from .models import Category, Device
 from .validators import validate_real_image
 
 
-class CategoriaForm(forms.ModelForm):
+class CategoryForm(forms.ModelForm):
     class Meta:
-        model = Categoria
-        fields = ["nombre"]
+        model = Category
+        fields = ["name"]
         widgets = {
-            "nombre": forms.TextInput(attrs={
+            "name": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Ej.: Sensores de temperatura",
             }),
         }
 
-    def clean_nombre(self):
-        nombre = self.cleaned_data["nombre"].strip()
-        if len(nombre) < 3:
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        if len(name) < 3:
             raise ValidationError("Ingrese al menos 3 caracteres.")
 
-        existe = Categoria.objects.filter(
-            nombre__iexact=nombre
+        exists = Category.objects.filter(
+            name__iexact=name
         ).exclude(
             pk=self.instance.pk
         ).exists()
-        if existe:
+        if exists:
             raise ValidationError("Ya existe una categoría con ese nombre.")
 
-        return nombre
+        return name
 
 MAX_SIZE = 2 * 1024 * 1024  # 2 MB
 ALLOWED = {".jpg", ".jpeg", ".png"}
 
 
-class DispositivoForm(forms.ModelForm):
+class DeviceForm(forms.ModelForm):
     class Meta:
-        model = Dispositivo
-        fields = ["nombre", "categoria", "zona", "activo", "image"]
+        model = Device
+        fields = ["name", "category", "manufacturer", "zone", "is_active", "image"]
         widgets = {
-            "nombre": forms.TextInput(attrs={"class": "form-control"}),
-            "categoria": forms.Select(attrs={"class": "form-select"}),
-            "zona": forms.Select(attrs={"class": "form-select"}),
-            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "name": forms.TextInput(attrs={"class": "form-control"}),
+            "category": forms.Select(attrs={"class": "form-select"}),
+            "manufacturer": forms.Select(attrs={"class": "form-select"}),
+            "zone": forms.Select(attrs={"class": "form-select"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "image": forms.ClearableFileInput(attrs={
                 "class": "form-control",
                 "accept": ".jpg,.jpeg,.png",
             }),
         }
-        labels = {"image": "Imagen (JPG o PNG, máx. 2 MB)"}
+        labels = {
+            "name": "Nombre",
+            "category": "Categoría",
+            "manufacturer": "Fabricante",
+            "zone": "Zona",
+            "is_active": "Activo",
+            "image": "Imagen (JPG o PNG, máx. 2 MB)",
+        }
         error_messages = {
             "image": {"invalid_image": "El archivo no es una imagen válida."},
         }
 
-    def __init__(self, *args, organizacion=None, **kwargs):
+    def __init__(self, *args, organization=None, **kwargs):
         super().__init__(*args, **kwargs)
-        zonas = Zona.objects.filter(deleted_at__isnull=True)
-        if organizacion is not None:
+        zones = Zone.objects.filter(deleted_at__isnull=True)
+        if organization is not None:
             # scoping: solo zonas de la organización del usuario
-            zonas = zonas.filter(departamento__organizacion=organizacion)
-        self.fields["zona"].queryset = zonas.order_by("nombre")
+            zones = zones.filter(department__organization=organization)
+        self.fields["zone"].queryset = zones.order_by("name")
         # La extensión se valida en clean_image() con un mensaje propio.
         self.fields["image"].validators = [
             v for v in self.fields["image"].validators

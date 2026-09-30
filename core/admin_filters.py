@@ -16,10 +16,10 @@ class OrgScopedListFilter(admin.SimpleListFilter):
     """
     Filtro base. Cada subclase debe definir:
     - title, parameter_name (igual que cualquier SimpleListFilter)
-    - related_model: el modelo sobre el que se filtra (ej. Zona, Dispositivo)
-    - related_field_lookup: el lookup desde related_model hasta Organizacion
-      (ej. "organizacion", "departamento__organizacion",
-      "zona__departamento__organizacion"). Usar None si related_model ES
+    - related_model: el modelo sobre el que se filtra (ej. Zone, Device)
+    - related_field_lookup: el lookup desde related_model hasta Organization
+      (ej. "organization", "department__organization",
+      "zone__department__organization"). Usar None si related_model ES
       Organizacion.
     """
 
@@ -29,11 +29,11 @@ class OrgScopedListFilter(admin.SimpleListFilter):
     def lookups(self, request, model_admin):
         qs = self.related_model.objects.all()
         if not request.user.is_superuser:
-            organizacion = get_user_organization(request)
+            organization = get_user_organization(request)
             if self.related_field_lookup:
-                qs = qs.filter(**{self.related_field_lookup: organizacion})
+                qs = qs.filter(**{self.related_field_lookup: organization})
             else:
-                qs = qs.filter(pk=organizacion.id)
+                qs = qs.filter(pk=organization.id)
         return [(obj.pk, str(obj)) for obj in qs]
 
     def queryset(self, request, queryset):

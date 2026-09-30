@@ -7,7 +7,7 @@ Uso:
 
 Crea:
 - 2 organizaciones (EcoEnergy Norte, EcoEnergy Sur) con sus departamentos, zonas,
-  categorías, dispositivos, mediciones, alertas y mantenimientos.
+  categorías, fabricantes, dispositivos, mediciones, alertas y mantenimientos.
 - 5 usuarios de prueba con permisos/contextos distintos:
     ADMIN            -> superusuario (acceso completo, sin restricción de organización)
     admin_norte      -> grupo "Administrador organizacional", organización Norte
@@ -27,29 +27,29 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import UserProfile
-from devices.models import Categoria, Dispositivo
-from monitoring.models import Alerta, Medicion, Mantenimiento
-from organizations.models import Departamento, Organizacion, Zona
+from devices.models import Category, Device, DeviceAssignment, Manufacturer
+from monitoring.models import Alert, Maintenance, Measurement
+from organizations.models import Department, Organization, Zone
 
 TEST_PASSWORD = "Ecoenergy2026*"
 
 GROUP_PERMS = {
     "Administrador organizacional": [
-        ("organizations", "organizacion", ["add", "change", "view"]),
-        ("organizations", "departamento", ["add", "change", "view"]),
-        ("organizations", "zona", ["add", "change", "view"]),
-        ("devices", "categoria", ["add", "change", "view"]),
-        ("devices", "dispositivo", ["add", "change", "delete", "view"]),
+        ("organizations", "organization", ["add", "change", "view"]),
+        ("organizations", "department", ["add", "change", "view"]),
+        ("organizations", "zone", ["add", "change", "view"]),
+        ("devices", "category", ["add", "change", "view"]),
+        ("devices", "device", ["add", "change", "delete", "view"]),
     ],
     "Operador": [
-        ("devices", "dispositivo", ["view"]),
-        ("monitoring", "medicion", ["add", "view"]),
-        ("monitoring", "alerta", ["view", "change"]),
+        ("devices", "device", ["view"]),
+        ("monitoring", "measurement", ["add", "view"]),
+        ("monitoring", "alert", ["view", "change"]),
     ],
     "Consulta": [
-        ("devices", "dispositivo", ["view"]),
-        ("monitoring", "medicion", ["view"]),
-        ("monitoring", "alerta", ["view"]),
+        ("devices", "device", ["view"]),
+        ("monitoring", "measurement", ["view"]),
+        ("monitoring", "alert", ["view"]),
     ],
 }
 
@@ -88,18 +88,20 @@ class Command(BaseCommand):
     def _reset(self):
         self.stdout.write("Borrando datos de prueba anteriores...")
         # Los FK usan on_delete=PROTECT, así que hay que borrar de hijos a padres.
+        orgs = Organization.objects.filter(name__in=["EcoEnergy Norte", "EcoEnergy Sur"])
+        departments = Department.objects.filter(organization__in=orgs)
+        zones = Zone.objects.filter(department__in=departments)
+        devices = Device.objects.filter(zone__in=zones)
+        Measurement.objects.filter(device__in=devices).delete()
+        Alert.objects.filter(device__in=devices).delete()
+        Maintenance.objects.filter(device__in=devices).delete()
+        DeviceAssignment.objects.filter(device__in=devices).delete()
         User.objects.filter(username__in=TEST_USERNAMES).delete()
-        orgs = Organizacion.objects.filter(nombre__in=["EcoEnergy Norte", "EcoEnergy Sur"])
-        deptos = Departamento.objects.filter(organizacion__in=orgs)
-        zonas = Zona.objects.filter(departamento__in=deptos)
-        dispositivos = Dispositivo.objects.filter(zona__in=zonas)
-        Medicion.objects.filter(dispositivo__in=dispositivos).delete()
-        Alerta.objects.filter(dispositivo__in=dispositivos).delete()
-        Mantenimiento.objects.filter(dispositivo__in=dispositivos).delete()
-        dispositivos.delete()
-        Categoria.objects.filter(nombre__in=["Medidor eléctrico", "Sensor de temperatura"]).delete()
-        zonas.delete()
-        deptos.delete()
+        devices.delete()
+        Category.objects.filter(name__in=["Medidor eléctrico", "Sensor de temperatura"]).delete()
+        Manufacturer.objects.filter(name__in=["Schneider Electric", "Siemens"]).delete()
+        zones.delete()
+        departments.delete()
         orgs.delete()
 
     def _ensure_groups(self):
@@ -125,71 +127,63 @@ class Command(BaseCommand):
     def _create_orgs(self):
         data = {}
 
-        norte = Organizacion.objects.create(nombre="EcoEnergy Norte")
-        depto_ops_norte = Departamento.objects.create(organizacion=norte, nombre="Operaciones")
-        depto_admin_norte = Departamento.objects.create(organizacion=norte, nombre="Administración")
-        zona_norte = Zona.objects.create(
-            departamento=depto_ops_norte, nombre="Zona Norte 1", limite_consumo=40.0
+        norte = Organization.objects.create(name="EcoEnergy Norte")
+        dept_ops_norte = Department.objects.create(organization=norte, name="Operaciones")
+        dept_admin_norte = Department.objects.create(organization=norte, name="Administración")
+        zone_norte = Zone.objects.create(
+            department=dept_ops_norte, name="Zona Norte 1", consumption_limit=40.0
         )
 
-        sur = Organizacion.objects.create(nombre="EcoEnergy Sur")
-        depto_ops_sur = Departamento.objects.create(organizacion=sur, nombre="Operaciones Sur")
-        zona_sur = Zona.objects.create(
-            departamento=depto_ops_sur, nombre="Zona Sur 1", limite_consumo=150.0
+        sur = Organization.objects.create(name="EcoEnergy Sur")
+        dept_ops_sur = Department.objects.create(organization=sur, name="Operaciones Sur")
+        zone_sur = Zone.objects.create(
+            department=dept_ops_sur, name="Zona Sur 1", consumption_limit=150.0
         )
 
-        cat_medidor, _ = Categoria.objects.get_or_create(nombre="Medidor eléctrico")
-        cat_sensor, _ = Categoria.objects.get_or_create(nombre="Sensor de temperatura")
+        cat_meter, _ = Category.objects.get_or_create(name="Medidor eléctrico")
+        cat_sensor, _ = Category.objects.get_or_create(name="Sensor de temperatura")
+        maker_a, _ = Manufacturer.objects.get_or_create(name="Schneider Electric", defaults={"country": "Francia"})
+        maker_b, _ = Manufacturer.objects.get_or_create(name="Siemens", defaults={"country": "Alemania"})
 
-        disp_pc = Dispositivo.objects.create(
-            zona=zona_norte, categoria=cat_medidor, nombre="PC"
-        )
-        disp_sensor_norte = Dispositivo.objects.create(
-            zona=zona_norte, categoria=cat_sensor, nombre="Sensor Sala Norte"
-        )
-        disp_sensor_sur = Dispositivo.objects.create(
-            zona=zona_sur, categoria=cat_medidor, nombre="Sensor sur"
-        )
-        disp_compresor_sur = Dispositivo.objects.create(
-            zona=zona_sur, categoria=cat_sensor, nombre="Compresor Sur"
-        )
+        dev_pc = Device.objects.create(zone=zone_norte, category=cat_meter, manufacturer=maker_a, name="PC")
+        dev_sensor_norte = Device.objects.create(zone=zone_norte, category=cat_sensor, manufacturer=maker_b, name="Sensor Sala Norte")
+        dev_sensor_sur = Device.objects.create(zone=zone_sur, category=cat_meter, manufacturer=maker_a, name="Sensor sur")
+        dev_compressor_sur = Device.objects.create(zone=zone_sur, category=cat_sensor, manufacturer=maker_b, name="Compresor Sur")
 
-        ahora = timezone.now()
-        for disp, valores in [
-            (disp_pc, [12.5, 15.2]),
-            (disp_sensor_norte, [8.0]),
-            (disp_sensor_sur, [90.0, 160.0]),
-            (disp_compresor_sur, [45.3]),
+        now = timezone.now()
+        for device, values in [
+            (dev_pc, [12.5, 15.2]),
+            (dev_sensor_norte, [8.0]),
+            (dev_sensor_sur, [90.0, 160.0]),
+            (dev_compressor_sur, [45.3]),
         ]:
-            for i, valor in enumerate(valores):
-                Medicion.objects.create(
-                    dispositivo=disp,
-                    valor_consumo=valor,
-                    fecha_hora=ahora - timedelta(hours=i),
+            for i, value in enumerate(values):
+                Measurement.objects.create(
+                    device=device,
+                    consumption_value=value,
+                    measured_at=now - timedelta(hours=i),
                 )
 
-        Alerta.objects.create(
-            dispositivo=disp_sensor_norte, estado="NORMAL", fecha_generada=ahora
+        Alert.objects.create(
+            device=dev_sensor_norte, level=Alert.Level.INFO,
+            status=Alert.Status.RESOLVED, message="Consumo normal", generated_at=now,
         )
-        Alerta.objects.create(
-            dispositivo=disp_sensor_sur, estado="ALERTA", fecha_generada=ahora
-        )
-
-        Mantenimiento.objects.create(
-            dispositivo=disp_pc,
-            tipo="Preventivo",
-            estado="PENDIENTE",
-            fecha_programada=ahora + timedelta(days=7),
-        )
-        Mantenimiento.objects.create(
-            dispositivo=disp_compresor_sur,
-            tipo="Correctivo",
-            estado="PENDIENTE",
-            fecha_programada=ahora + timedelta(days=2),
+        Alert.objects.create(
+            device=dev_sensor_sur, level=Alert.Level.CRITICAL,
+            status=Alert.Status.OPEN, message="Límite de zona superado", generated_at=now,
         )
 
-        data["norte"] = {"org": norte, "depto_ops": depto_ops_norte, "depto_admin": depto_admin_norte}
-        data["sur"] = {"org": sur, "depto_ops": depto_ops_sur}
+        Maintenance.objects.create(
+            device=dev_pc, type=Maintenance.Type.PREVENTIVE,
+            status=Maintenance.Status.PENDING, scheduled_at=now + timedelta(days=7),
+        )
+        Maintenance.objects.create(
+            device=dev_compressor_sur, type=Maintenance.Type.CORRECTIVE,
+            status=Maintenance.Status.PENDING, scheduled_at=now + timedelta(days=2),
+        )
+
+        data["norte"] = {"org": norte, "dept_ops": dept_ops_norte, "dept_admin": dept_admin_norte, "device": dev_pc}
+        data["sur"] = {"org": sur, "dept_ops": dept_ops_sur, "device": dev_sensor_sur}
         return data
 
     def _create_users(self, groups, orgs):
@@ -201,8 +195,8 @@ class Command(BaseCommand):
             admin.save()
         UserProfile.objects.create(
             user=admin,
-            organizacion=orgs["norte"]["org"],
-            departamento=orgs["norte"]["depto_admin"],
+            organization=orgs["norte"]["org"],
+            department=orgs["norte"]["dept_admin"],
             employee_code="EMP-001",
         )
 
@@ -212,8 +206,8 @@ class Command(BaseCommand):
         admin_norte.groups.add(groups["Administrador organizacional"])
         UserProfile.objects.create(
             user=admin_norte,
-            organizacion=orgs["norte"]["org"],
-            departamento=orgs["norte"]["depto_admin"],
+            organization=orgs["norte"]["org"],
+            department=orgs["norte"]["dept_admin"],
             employee_code="EMP-002",
         )
 
@@ -223,8 +217,8 @@ class Command(BaseCommand):
         operador1.groups.add(groups["Operador"])
         UserProfile.objects.create(
             user=operador1,
-            organizacion=orgs["norte"]["org"],
-            departamento=orgs["norte"]["depto_ops"],
+            organization=orgs["norte"]["org"],
+            department=orgs["norte"]["dept_ops"],
             employee_code="EMP-003",
         )
 
@@ -234,8 +228,8 @@ class Command(BaseCommand):
         operador2.groups.add(groups["Operador"])
         UserProfile.objects.create(
             user=operador2,
-            organizacion=orgs["sur"]["org"],
-            departamento=orgs["sur"]["depto_ops"],
+            organization=orgs["sur"]["org"],
+            department=orgs["sur"]["dept_ops"],
             employee_code="EMP-004",
         )
 
@@ -245,8 +239,8 @@ class Command(BaseCommand):
         consulta_sur.groups.add(groups["Consulta"])
         UserProfile.objects.create(
             user=consulta_sur,
-            organizacion=orgs["sur"]["org"],
-            departamento=orgs["sur"]["depto_ops"],
+            organization=orgs["sur"]["org"],
+            department=orgs["sur"]["dept_ops"],
             employee_code="EMP-005",
         )
 
@@ -255,3 +249,11 @@ class Command(BaseCommand):
             username="staff_sin_perfil", password=TEST_PASSWORD, is_staff=True
         )
         staff_sin_perfil.groups.add(groups["Operador"])
+
+        # Operación: responsables asignados a dispositivos de su organización.
+        DeviceAssignment.objects.create(
+            device=orgs["norte"]["device"], user=operador1, notes="Responsable de Norte"
+        )
+        DeviceAssignment.objects.create(
+            device=orgs["sur"]["device"], user=operador2, notes="Responsable de Sur"
+        )
