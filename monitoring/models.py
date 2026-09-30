@@ -20,14 +20,14 @@ class Measurement(BaseModel):
 
 class Alert(BaseModel):
     class Level(models.TextChoices):
-        INFO = "INFO", "Info"
-        WARNING = "WARNING", "Warning"
-        CRITICAL = "CRITICAL", "Critical"
+        INFO = "INFO", "Informativa"
+        WARNING = "WARNING", "Advertencia"
+        CRITICAL = "CRITICAL", "Crítica"
 
     class Status(models.TextChoices):
-        OPEN = "OPEN", "Open"
-        ACKNOWLEDGED = "ACKNOWLEDGED", "Acknowledged"
-        RESOLVED = "RESOLVED", "Resolved"
+        OPEN = "OPEN", "Abierta"
+        ACKNOWLEDGED = "ACKNOWLEDGED", "Reconocida"
+        RESOLVED = "RESOLVED", "Resuelta"
 
     device = models.ForeignKey(
         "devices.Device",
@@ -49,13 +49,13 @@ class Alert(BaseModel):
 
 class Maintenance(BaseModel):
     class Type(models.TextChoices):
-        PREVENTIVE = "PREVENTIVE", "Preventive"
-        CORRECTIVE = "CORRECTIVE", "Corrective"
+        PREVENTIVE = "PREVENTIVE", "Preventiva"
+        CORRECTIVE = "CORRECTIVE", "Correctiva"
 
     class Status(models.TextChoices):
-        PENDING = "PENDING", "Pending"
-        IN_PROGRESS = "IN_PROGRESS", "In progress"
-        DONE = "DONE", "Done"
+        PENDING = "PENDING", "Pendiente"
+        IN_PROGRESS = "IN_PROGRESS", "En progreso"
+        DONE = "DONE", "Finalizada"
 
     device = models.ForeignKey(
         "devices.Device",

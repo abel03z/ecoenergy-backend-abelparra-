@@ -70,7 +70,7 @@ class MaintenanceForm(forms.ModelForm):
             if status != Maintenance.Status.DONE:
                 self.add_error(
                     "completed_at",
-                    "Solo las mantenciones en estado «Done» pueden tener fecha de término.",
+                    "Solo las mantenciones en estado «Finalizada» pueden tener fecha de término.",
                 )
             elif completed_at > now:
                 self.add_error("completed_at", "La fecha de término no puede estar en el futuro.")
