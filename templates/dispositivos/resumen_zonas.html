@@ -4,7 +4,7 @@
 
 {% block content %}
 <h1 class="mb-1">Resumen de consumo por zona</h1>
-<p class="text-muted mb-4">Datos agrupados desde zonas.json y dispositivos.json</p>
+<p class="text-muted mb-4">Suma de las mediciones vigentes de los dispositivos de cada zona</p>
 
 <div class="row row-cols-1 row-cols-md-3 g-4 mb-4">
     <div class="col">
@@ -27,7 +27,7 @@
         <div class="card h-100 border-warning shadow-sm">
             <div class="card-body">
                 <h6 class="card-subtitle text-muted text-uppercase small mb-2">Consumo total</h6>
-                <p class="card-text fs-3 fw-bold mb-0">{{ consumo_total_general }} kWh</p>
+                <p class="card-text fs-3 fw-bold mb-0">{{ consumo_total_general|floatformat:1 }} kWh</p>
             </div>
         </div>
     </div>
@@ -48,10 +48,10 @@
         <tbody>
             {% for zona in zonas %}
             <tr>
-                <td>{{ zona.nombre }}</td>
+                <td>{{ zona.zona.name }}<div class="text-muted small">{{ zona.zona.department.organization }}</div></td>
                 <td>{{ zona.cantidad_dispositivos }}</td>
-                <td>{{ zona.consumo_total }} kWh</td>
-                <td>{{ zona.limite_kwh }} kWh</td>
+                <td>{{ zona.consumo_total|floatformat:1 }} kWh</td>
+                <td>{{ zona.zona.consumption_limit|floatformat:1 }} kWh</td>
                 <td>
                     {% if zona.estado == "LÍMITE SUPERADO" %}
                     <span class="badge rounded-pill text-bg-danger">{{ zona.estado }}</span>

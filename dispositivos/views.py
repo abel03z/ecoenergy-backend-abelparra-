@@ -1,6 +1,10 @@
-import humanize
-from django.http import HttpResponse
-from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q, Sum
+from django.shortcuts import get_object_or_404, render
+
+from core.admin_utils import get_user_organization
+from devices.models import Device
+from organizations.models import Zone
 
 
 def inicio(request):
@@ -20,70 +24,93 @@ def catalogo(request):
     ]
     return render(request, "dispositivos/catalogo.html", {"dispositivos": dispositivos})
 
-from django.http import Http404
-from dispositivos.data_access import (
-    obtener_zonas,
-    obtener_zona_por_id,
-    dispositivos_de_zona,
-    categoria_por_id,
-    calcular_consumo_total,
-    calcular_estado,
-    resumen_por_zona,
-)
+
+# ---------------------------------------------------------------------------
+# Zonas y resumen de consumo: datos reales de la base de datos, con scoping por
+# organización y sin registros eliminados lógicamente (Zone/Device/Measurement
+# .objects ya los excluyen; en los agregados se filtra de forma explícita).
+# ---------------------------------------------------------------------------
+ESTADO_NORMAL = "DENTRO DEL LÍMITE"
+ESTADO_SUPERADO = "LÍMITE SUPERADO"
 
 
+def _zones_for(request):
+    qs = Zone.objects.select_related("department__organization")
+    if not request.user.is_superuser:
+        qs = qs.filter(department__organization=get_user_organization(request))
+    return qs
+
+
+def _with_stats(queryset):
+    """Agrega cantidad de dispositivos y consumo total (suma de mediciones vigentes)."""
+    return queryset.annotate(
+        device_count=Count(
+            "devices", filter=Q(devices__deleted_at__isnull=True), distinct=True
+        ),
+        total_consumption=Sum(
+            "devices__measurements__consumption_value",
+            filter=Q(
+                devices__deleted_at__isnull=True,
+                devices__measurements__deleted_at__isnull=True,
+            ),
+        ),
+    )
+
+
+def _status(consumption, limit):
+    return ESTADO_SUPERADO if consumption > limit else ESTADO_NORMAL
+
+
+@login_required
 def zonas(request):
-    lista_zonas = []
-    for zona in obtener_zonas():
-        disp = dispositivos_de_zona(zona["id"])
-        lista_zonas.append({
-            "id": zona["id"],
-            "nombre": zona["nombre"],
-            "limite_kwh": zona["limite_kwh"],
-            "cantidad_dispositivos": len(disp),
-        })
+    zones = _with_stats(_zones_for(request)).order_by("department__organization__name", "name")
+    return render(request, "dispositivos/zonas.html", {"zonas": zones})
 
-    return render(request, "dispositivos/zonas.html", {"zonas": lista_zonas})
 
+@login_required
 def zona_detalle(request, zona_id):
-    zona = obtener_zona_por_id(zona_id)
-    if zona is None:
-        raise Http404("La zona solicitada no existe.")
+    zone = get_object_or_404(_with_stats(_zones_for(request)), pk=zona_id)
+    consumption = zone.total_consumption or 0
 
-    disp = dispositivos_de_zona(zona_id)
-    consumo_total = calcular_consumo_total(disp)
-    estado = calcular_estado(consumo_total, zona["limite_kwh"])
-
-    dispositivos_con_categoria = []
-    for d in disp:
-        categoria = categoria_por_id(d["categoria_id"])
-        dispositivos_con_categoria.append({
-            "nombre": d["nombre"],
-            "categoria": categoria["nombre"] if categoria else "Sin categoría",
-            "consumo_kwh": d["consumo_kwh"],
-        })
+    devices = (
+        Device.objects.filter(zone=zone)
+        .select_related("category", "manufacturer")
+        .annotate(
+            total_consumption=Sum(
+                "measurements__consumption_value",
+                filter=Q(measurements__deleted_at__isnull=True),
+            )
+        )
+        .order_by("name")
+    )
 
     contexto = {
-        "zona": zona,
-        "dispositivos": dispositivos_con_categoria,
-        "consumo_total": humanize.intcomma(consumo_total),
-        "estado": estado,
-        "cantidad_dispositivos": len(disp),
+        "zona": zone,
+        "dispositivos": devices,
+        "consumo_total": consumption,
+        "estado": "ALERTA" if consumption > zone.consumption_limit else "NORMAL",
+        "cantidad_dispositivos": zone.device_count,
     }
     return render(request, "dispositivos/zona_detalle.html", contexto)
 
 
+@login_required
 def resumen_zonas(request):
-    zonas_resumen = resumen_por_zona()
-
-    total_zonas = len(zonas_resumen)
-    total_dispositivos = sum(z["cantidad_dispositivos"] for z in zonas_resumen)
-    consumo_total_general = sum(z["consumo_total"] for z in zonas_resumen)
+    zones = _with_stats(_zones_for(request)).order_by("department__organization__name", "name")
+    rows = []
+    for zone in zones:
+        consumption = zone.total_consumption or 0
+        rows.append({
+            "zona": zone,
+            "cantidad_dispositivos": zone.device_count,
+            "consumo_total": consumption,
+            "estado": _status(consumption, zone.consumption_limit),
+        })
 
     contexto = {
-        "zonas": zonas_resumen,
-        "total_zonas": total_zonas,
-        "total_dispositivos": total_dispositivos,
-        "consumo_total_general": humanize.intcomma(consumo_total_general),
+        "zonas": rows,
+        "total_zonas": len(rows),
+        "total_dispositivos": sum(r["cantidad_dispositivos"] for r in rows),
+        "consumo_total_general": sum(r["consumo_total"] for r in rows),
     }
     return render(request, "dispositivos/resumen_zonas.html", contexto)

@@ -19,7 +19,7 @@
             <th>Estado</th>
             <th>Programada</th>
             <th>Técnico</th>
-            <th class="text-end">Acciones</th>
+            {% if perms.monitoring.change_maintenance or perms.monitoring.delete_maintenance %}<th class="text-end">Acciones</th>{% endif %}
         </tr>
     </thead>
     <tbody>
@@ -30,6 +30,7 @@
             <td>{{ maintenance.get_status_display }}</td>
             <td>{{ maintenance.scheduled_at|date:"d/m/Y H:i" }}</td>
             <td>{{ maintenance.technician|default:"—" }}</td>
+            {% if perms.monitoring.change_maintenance or perms.monitoring.delete_maintenance %}
             <td class="text-end">
                 {% if perms.monitoring.change_maintenance %}
                 <a href="{% url 'monitoring:maintenance_update' maintenance.pk %}" class="btn btn-sm btn-outline-primary">Editar</a>
@@ -43,9 +44,10 @@
                 </form>
                 {% endif %}
             </td>
+            {% endif %}
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center text-muted py-4">No hay mantenciones registradas.</td></tr>
+        <tr><td colspan="{% if perms.monitoring.change_maintenance or perms.monitoring.delete_maintenance %}6{% else %}5{% endif %}" class="text-center text-muted py-4">No hay mantenciones registradas.</td></tr>
         {% endfor %}
     </tbody>
 </table>

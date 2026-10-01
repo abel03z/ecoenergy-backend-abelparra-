@@ -11,7 +11,7 @@ from core.admin_utils import get_user_organization
 from core.pagination import paginate
 from core.views import SoftDeleteMixin
 from .models import Category, Device
-from .forms import CategoryForm, DeviceForm
+from .forms import CategoryForm, DeviceFilterForm, DeviceForm
 
 
 @login_required
@@ -25,6 +25,9 @@ def dashboard(request):
         organization = get_user_organization(request)
         devices = Device.objects.filter(zone__department__organization=organization)
 
+    filter_form = DeviceFilterForm(request.GET or None, organization=organization)
+    devices = filter_form.apply(devices)
+
     devices = devices.select_related("zone", "category", "manufacturer").order_by("name")
     page_obj, page_size, page_sizes = paginate(request, devices)
 
@@ -36,6 +39,9 @@ def dashboard(request):
             "page_size": page_size,
             "page_sizes": page_sizes,
             "organization": organization,
+            "filter_form": filter_form,
+            "base_query": filter_form.query_string(),
+            "has_filters": bool(filter_form.query_string()),
         },
     )
 

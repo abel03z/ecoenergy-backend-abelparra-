@@ -17,6 +17,7 @@ document.querySelectorAll(".js-delete").forEach(button => {
             showCancelButton: true,
             confirmButtonText: "Sí, eliminar",
             cancelButtonText: "Cancelar",
+            theme: document.documentElement.getAttribute("data-bs-theme") === "dark" ? "dark" : "light",
         });
         if (result.isConfirmed) {
             button.form.requestSubmit();

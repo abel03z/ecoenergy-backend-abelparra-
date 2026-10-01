@@ -1,11 +1,13 @@
 from pathlib import Path
 
+from urllib.parse import urlencode
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_image_file_extension
 
 from organizations.models import Zone
-from .models import Category, Device
+from .models import Category, Device, Manufacturer
 from .validators import validate_real_image
 
 
@@ -97,3 +99,61 @@ class DeviceForm(forms.ModelForm):
 
         validate_real_image(image)
         return image
+
+
+class DeviceFilterForm(forms.Form):
+    """Filtros del listado de dispositivos (GET). Todos son opcionales."""
+
+    q = forms.CharField(
+        required=False,
+        max_length=100,
+        label="Buscar",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Nombre del dispositivo"}),
+    )
+    category = forms.ModelChoiceField(
+        queryset=Category.objects.none(), required=False, label="Categoría",
+        empty_label="Todas", widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    manufacturer = forms.ModelChoiceField(
+        queryset=Manufacturer.objects.none(), required=False, label="Fabricante",
+        empty_label="Todos", widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    zone = forms.ModelChoiceField(
+        queryset=Zone.objects.none(), required=False, label="Zona",
+        empty_label="Todas", widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    def __init__(self, *args, organization=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        zones = Zone.objects.all()
+        if organization is not None:
+            # Solo se puede filtrar por zonas de la propia organización.
+            zones = zones.filter(department__organization=organization)
+        self.fields["category"].queryset = Category.objects.order_by("name")
+        self.fields["manufacturer"].queryset = Manufacturer.objects.order_by("name")
+        self.fields["zone"].queryset = zones.order_by("name")
+
+    def apply(self, queryset):
+        """Aplica los filtros válidos; los valores inválidos se ignoran."""
+        self.is_valid()  # cleaned_data conserva los campos que sí son válidos
+        data = getattr(self, "cleaned_data", {})
+        if data.get("q"):
+            queryset = queryset.filter(name__icontains=data["q"].strip())
+        if data.get("category"):
+            queryset = queryset.filter(category=data["category"])
+        if data.get("manufacturer"):
+            queryset = queryset.filter(manufacturer=data["manufacturer"])
+        if data.get("zone"):
+            queryset = queryset.filter(zone=data["zone"])
+        return queryset
+
+    def query_string(self):
+        """Filtros vigentes como query string ('' o 'a=1&b=2&') para conservarlos al paginar."""
+        data = getattr(self, "cleaned_data", {})
+        params = {}
+        if data.get("q"):
+            params["q"] = data["q"].strip()
+        for name in ("category", "manufacturer", "zone"):
+            if data.get(name):
+                params[name] = data[name].pk
+        return urlencode(params) + "&" if params else ""
