@@ -7,7 +7,7 @@ from core.admin_utils import get_user_organization
 from core.pagination import paginate
 from core.views import SoftDeleteMixin
 
-from .forms import ZoneForm
+from .forms import ZoneFilterForm, ZoneForm
 from .models import Zone
 
 
@@ -31,11 +31,26 @@ class ZoneListView(LoginRequiredMixin, PermissionRequiredMixin, ZoneScopedMixin,
     permission_required = "organizations.view_zone"
     template_name = "organizations/zone_list.html"
 
+    def get_filter_form(self):
+        if not hasattr(self, "_filter_form"):
+            self._filter_form = ZoneFilterForm(
+                self.request.GET or None, organization=self.get_organization()
+            )
+        return self._filter_form
+
+    def get_queryset(self):
+        return self.get_filter_form().apply(super().get_queryset())
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         page_obj, page_size, page_sizes = paginate(self.request, self.get_queryset())
         context.update(
-            {"page_obj": page_obj, "page_size": page_size, "page_sizes": page_sizes}
+            {
+                "page_obj": page_obj,
+                "page_size": page_size,
+                "page_sizes": page_sizes,
+                **self.get_filter_form().filter_context(),
+            }
         )
         return context
 

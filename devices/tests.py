@@ -424,3 +424,38 @@ class ActionsColumnTests(TestCase):
         for name in ("devices:dashboard", "devices:category_list"):
             self.assertContains(self.client.get(reverse(name)), "Acciones", msg_prefix=name)
 
+
+
+class CategoryFilterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        for name in ("Bomba de agua", "Medidor de agua", "Medidor eléctrico", "Inversor"):
+            Category.objects.create(name=name)
+        group = Group.objects.create(name="Lector categorías filtro")
+        group.permissions.add(Permission.objects.get(codename="view_category"))
+        cls.user = User.objects.create_user("c_filter", password="x")
+        cls.user.groups.add(group)
+
+    def setUp(self):
+        self.client.force_login(self.user)
+        self.url = reverse("devices:category_list")
+
+    def names(self, params=None):
+        r = self.client.get(self.url, params or {})
+        self.assertEqual(r.status_code, 200)
+        return [c.name for c in r.context["categories"]]
+
+    def test_filtra_por_nombre(self):
+        self.assertEqual(self.names({"q": "agua"}), ["Bomba de agua", "Medidor de agua"])
+        self.assertEqual(self.names({"q": "MEDIDOR"}), ["Medidor de agua", "Medidor eléctrico"])
+
+    def test_sin_filtros_y_sin_resultados(self):
+        self.assertEqual(len(self.names()), 4)
+        r = self.client.get(self.url, {"q": "zzz"})
+        self.assertContains(r, "Ninguna categoría coincide con los filtros.")
+
+    def test_paginacion_conserva_el_filtro(self):
+        for i in range(8):
+            Category.objects.create(name=f"Agua extra {i}")
+        r = self.client.get(self.url, {"q": "agua"})
+        self.assertContains(r, "?q=agua&amp;page=2")

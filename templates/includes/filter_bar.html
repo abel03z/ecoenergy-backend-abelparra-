@@ -1,0 +1,14 @@
+<form method="get" action="{{ action }}" class="row g-2 align-items-end mb-3">
+    {% for field in filter_form %}
+    <div class="col-md">
+        {{ field.label_tag }}
+        {{ field }}
+    </div>
+    {% endfor %}
+    <div class="col-md-auto d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Filtrar</button>
+        {% if has_filters %}
+        <a href="{{ action }}" class="btn btn-outline-secondary">Limpiar</a>
+        {% endif %}
+    </div>
+</form>

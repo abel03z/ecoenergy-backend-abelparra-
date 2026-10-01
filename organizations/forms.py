@@ -1,5 +1,7 @@
 from django import forms
 
+from core.filters import FilterFormMixin
+
 from .models import Department, Zone
 
 MAX_CONSUMPTION_LIMIT = 100000
@@ -56,3 +58,36 @@ class ZoneForm(forms.ModelForm):
             if duplicated.exists():
                 self.add_error("name", "Ya existe una zona con ese nombre en el departamento.")
         return cleaned
+
+
+class ZoneFilterForm(FilterFormMixin, forms.Form):
+    q = forms.CharField(
+        required=False,
+        max_length=100,
+        label="Buscar",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Nombre de la zona"}),
+    )
+    department = forms.ModelChoiceField(
+        queryset=Department.objects.none(), required=False, label="Departamento",
+        empty_label="Todos", widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    def __init__(self, *args, organization=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        departments = Department.objects.select_related("organization")
+        if organization is not None:
+            departments = departments.filter(organization=organization)
+        else:
+            # Superusuario: los nombres se repiten entre organizaciones, se indica cuál es cuál.
+            self.fields["department"].label_from_instance = (
+                lambda d: f"{d.name} · {d.organization}"
+            )
+        self.fields["department"].queryset = departments.order_by("name")
+
+    def apply(self, queryset):
+        data = self.current_filters()
+        if data.get("q"):
+            queryset = queryset.filter(name__icontains=data["q"].strip())
+        if data.get("department"):
+            queryset = queryset.filter(department=data["department"])
+        return queryset

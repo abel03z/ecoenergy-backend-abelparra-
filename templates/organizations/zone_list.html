@@ -8,6 +8,9 @@
     {% endif %}
 </div>
 
+{% url 'organizations:zone_list' as list_url %}
+{% include "includes/filter_bar.html" with action=list_url %}
+
 <table class="table table-hover align-middle">
     <thead class="table-light">
         <tr>
@@ -41,7 +44,7 @@
             {% endif %}
         </tr>
         {% empty %}
-        <tr><td colspan="{% if perms.organizations.change_zone or perms.organizations.delete_zone %}5{% else %}4{% endif %}" class="text-center text-muted py-4">No hay zonas registradas.</td></tr>
+        <tr><td colspan="{% if perms.organizations.change_zone or perms.organizations.delete_zone %}5{% else %}4{% endif %}" class="text-center text-muted py-4">{% if has_filters %}Ninguna zona coincide con los filtros.{% else %}No hay zonas registradas.{% endif %}</td></tr>
         {% endfor %}
     </tbody>
 </table>
