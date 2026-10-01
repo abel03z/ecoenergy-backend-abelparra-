@@ -14,13 +14,14 @@
     <thead class="table-light">
         <tr>
             <th>Nombre</th>
-            <th class="text-end">Acciones</th>
+            {% if perms.devices.change_category or perms.devices.delete_category %}<th class="text-end">Acciones</th>{% endif %}
         </tr>
     </thead>
     <tbody>
         {% for category in categories %}
         <tr>
             <td>{{ category.name }}</td>
+            {% if perms.devices.change_category or perms.devices.delete_category %}
             <td class="text-end">
                 {% if perms.devices.change_category %}
                 <a href="{% url 'devices:category_update' category.pk %}" class="btn btn-sm btn-outline-primary">
@@ -35,10 +36,11 @@
                 </form>
                 {% endif %}
             </td>
+            {% endif %}
         </tr>
         {% empty %}
         <tr>
-            <td colspan="2" class="text-center text-muted py-4">
+            <td colspan="{% if perms.devices.change_category or perms.devices.delete_category %}2{% else %}1{% endif %}" class="text-center text-muted py-4">
                 No hay categorías registradas.
             </td>
         </tr>

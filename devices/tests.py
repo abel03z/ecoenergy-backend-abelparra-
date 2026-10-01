@@ -311,3 +311,116 @@ class PaginationSessionTests(TestCase):
     def test_valor_invalido_sin_preferencia_usa_el_defecto(self):
         r = self.client.get(self.url, {"page_size": "9999"})
         self.assertEqual(len(r.context["page_obj"]), 5)
+
+
+class DeviceFilterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.norte = Organization.objects.create(name="Norte")
+        cls.sur = Organization.objects.create(name="Sur")
+        d_norte = Department.objects.create(organization=cls.norte, name="Ops N")
+        d_sur = Department.objects.create(organization=cls.sur, name="Ops S")
+        cls.z1 = Zone.objects.create(department=d_norte, name="Zona 1", consumption_limit=10)
+        cls.z2 = Zone.objects.create(department=d_norte, name="Zona 2", consumption_limit=10)
+        cls.z_sur = Zone.objects.create(department=d_sur, name="Zona Sur", consumption_limit=10)
+        cls.bomba = Category.objects.create(name="Bomba de agua")
+        cls.medidor = Category.objects.create(name="Medidor")
+        cls.abb = Manufacturer.objects.create(name="ABB")
+        cls.bosch = Manufacturer.objects.create(name="Bosch")
+
+        def device(name, zone, category, maker):
+            return Device.objects.create(name=name, zone=zone, category=category, manufacturer=maker)
+
+        device("Bomba 001", cls.z1, cls.bomba, cls.abb)
+        device("Bomba 002", cls.z2, cls.bomba, cls.bosch)
+        device("Medidor 001", cls.z1, cls.medidor, cls.abb)
+        device("Medidor Sur", cls.z_sur, cls.bomba, cls.abb)
+
+        group = Group.objects.create(name="Lector dispositivos")
+        group.permissions.add(Permission.objects.get(codename="view_device"))
+        cls.user = User.objects.create_user("f_user", password="x")
+        cls.user.groups.add(group)
+        UserProfile.objects.create(user=cls.user, organization=cls.norte, employee_code="F1")
+
+    def setUp(self):
+        self.client.force_login(self.user)
+        self.url = reverse("devices:dashboard")
+
+    def names(self, params=None):
+        r = self.client.get(self.url, params or {})
+        self.assertEqual(r.status_code, 200)
+        return [d.name for d in r.context["page_obj"]]
+
+    def test_sin_filtros_muestra_los_de_mi_organizacion(self):
+        self.assertEqual(self.names(), ["Bomba 001", "Bomba 002", "Medidor 001"])
+
+    def test_filtra_por_categoria(self):
+        self.assertEqual(self.names({"category": self.bomba.pk}), ["Bomba 001", "Bomba 002"])
+
+    def test_filtra_por_fabricante(self):
+        self.assertEqual(self.names({"manufacturer": self.abb.pk}), ["Bomba 001", "Medidor 001"])
+
+    def test_filtra_por_zona(self):
+        self.assertEqual(self.names({"zone": self.z2.pk}), ["Bomba 002"])
+
+    def test_filtra_por_nombre(self):
+        self.assertEqual(self.names({"q": "medidor"}), ["Medidor 001"])
+
+    def test_combina_filtros(self):
+        self.assertEqual(self.names({"category": self.bomba.pk, "manufacturer": self.abb.pk}), ["Bomba 001"])
+
+    def test_no_se_puede_filtrar_por_zona_de_otra_organizacion(self):
+        # el valor es inválido para este usuario: se ignora y no se filtran datos ajenos
+        self.assertEqual(self.names({"zone": self.z_sur.pk}), ["Bomba 001", "Bomba 002", "Medidor 001"])
+        self.assertNotIn("Medidor Sur", self.names({"category": self.bomba.pk}))
+
+    def test_valores_invalidos_se_ignoran(self):
+        self.assertEqual(self.names({"category": "abc", "zone": "99999"}),
+                         ["Bomba 001", "Bomba 002", "Medidor 001"])
+
+    def test_sin_resultados_muestra_mensaje(self):
+        r = self.client.get(self.url, {"q": "no existe"})
+        self.assertContains(r, "Ningún dispositivo coincide con los filtros.")
+
+    def test_la_paginacion_conserva_los_filtros(self):
+        for i in range(20):
+            Device.objects.create(name=f"Bomba extra {i:02d}", zone=self.z1,
+                                  category=self.bomba, manufacturer=self.abb)
+        r = self.client.get(self.url, {"category": self.bomba.pk})
+        self.assertContains(r, f"?category={self.bomba.pk}&amp;page=2")
+        self.assertContains(r, f"?category={self.bomba.pk}&amp;page_size=15")
+
+
+class ActionsColumnTests(TestCase):
+    """La columna «Acciones» solo aparece si el usuario puede editar o eliminar."""
+
+    @classmethod
+    def setUpTestData(cls):
+        org = Organization.objects.create(name="Org")
+        dept = Department.objects.create(organization=org, name="D")
+        zone = Zone.objects.create(department=dept, name="Z", consumption_limit=10)
+        Device.objects.create(name="Dev", zone=zone, category=Category.objects.create(name="Cat"),
+                              manufacturer=Manufacturer.objects.create(name="Acme"))
+        reader = Group.objects.create(name="Solo ver")
+        for codename in ("view_device", "view_category"):
+            reader.permissions.add(Permission.objects.get(codename=codename))
+        editor = Group.objects.create(name="Editor")
+        for codename in ("view_device", "change_device", "view_category", "change_category"):
+            editor.permissions.add(Permission.objects.get(codename=codename))
+        cls.reader = User.objects.create_user("a_reader", password="x")
+        cls.reader.groups.add(reader)
+        UserProfile.objects.create(user=cls.reader, organization=org, employee_code="A1")
+        cls.editor = User.objects.create_user("a_editor", password="x")
+        cls.editor.groups.add(editor)
+        UserProfile.objects.create(user=cls.editor, organization=org, employee_code="A2")
+
+    def test_lector_no_ve_la_columna_acciones(self):
+        self.client.force_login(self.reader)
+        for name in ("devices:dashboard", "devices:category_list"):
+            self.assertNotContains(self.client.get(reverse(name)), "Acciones", msg_prefix=name)
+
+    def test_con_permiso_de_edicion_si_la_ve(self):
+        self.client.force_login(self.editor)
+        for name in ("devices:dashboard", "devices:category_list"):
+            self.assertContains(self.client.get(reverse(name)), "Acciones", msg_prefix=name)
+
