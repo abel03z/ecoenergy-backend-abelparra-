@@ -11,7 +11,7 @@ from core.pagination import paginate
 from core.views import SoftDeleteMixin
 
 from .exports import XLSX_CONTENT_TYPE, build_maintenance_workbook
-from .forms import MaintenanceForm
+from .forms import MaintenanceFilterForm, MaintenanceForm
 from .models import Maintenance
 
 
@@ -25,6 +25,12 @@ def scoped_maintenances(request):
     if not request.user.is_superuser:
         qs = qs.filter(device__zone__department__organization=get_user_organization(request))
     return qs.order_by("-scheduled_at", "pk")
+
+
+def maintenance_filter_form(request):
+    """Formulario de filtros (GET) con opciones limitadas a la organización del usuario."""
+    organization = None if request.user.is_superuser else get_user_organization(request)
+    return MaintenanceFilterForm(request.GET or None, organization=organization)
 
 
 class MaintenanceScopedMixin:
@@ -45,11 +51,24 @@ class MaintenanceListView(
     permission_required = "monitoring.view_maintenance"
     template_name = "monitoring/maintenance_list.html"
 
+    def get_filter_form(self):
+        if not hasattr(self, "_filter_form"):
+            self._filter_form = maintenance_filter_form(self.request)
+        return self._filter_form
+
+    def get_queryset(self):
+        return self.get_filter_form().apply(super().get_queryset())
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         page_obj, page_size, page_sizes = paginate(self.request, self.get_queryset())
         context.update(
-            {"page_obj": page_obj, "page_size": page_size, "page_sizes": page_sizes}
+            {
+                "page_obj": page_obj,
+                "page_size": page_size,
+                "page_sizes": page_sizes,
+                **self.get_filter_form().filter_context(),
+            }
         )
         return context
 
@@ -109,8 +128,12 @@ class MaintenanceDeleteView(
 @login_required
 @permission_required("monitoring.view_maintenance", raise_exception=True)
 def maintenance_export(request):
-    """Descarga .xlsx con las mantenciones que el usuario puede ver."""
-    content = build_maintenance_workbook(scoped_maintenances(request))
+    """
+    Descarga .xlsx con las mantenciones que el usuario puede ver, aplicando
+    además los filtros activos del listado (si los hay).
+    """
+    queryset = maintenance_filter_form(request).apply(scoped_maintenances(request))
+    content = build_maintenance_workbook(queryset)
     filename = f"mantenciones_{timezone.localtime():%Y%m%d_%H%M}.xlsx"
     response = HttpResponse(content, content_type=XLSX_CONTENT_TYPE)
     response["Content-Disposition"] = f'attachment; filename="{filename}"'

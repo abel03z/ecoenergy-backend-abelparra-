@@ -11,7 +11,7 @@ from core.admin_utils import get_user_organization
 from core.pagination import paginate
 from core.views import SoftDeleteMixin
 from .models import Category, Device
-from .forms import CategoryForm, DeviceFilterForm, DeviceForm
+from .forms import CategoryFilterForm, CategoryForm, DeviceFilterForm, DeviceForm
 
 
 @login_required
@@ -39,9 +39,7 @@ def dashboard(request):
             "page_size": page_size,
             "page_sizes": page_sizes,
             "organization": organization,
-            "filter_form": filter_form,
-            "base_query": filter_form.query_string(),
-            "has_filters": bool(filter_form.query_string()),
+            **filter_form.filter_context(),
         },
     )
 
@@ -51,15 +49,16 @@ class CategoryPageContextMixin:
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        page_obj, page_size, page_sizes = paginate(
-            self.request, Category.objects.order_by("name")
-        )
+        filter_form = CategoryFilterForm(self.request.GET or None)
+        categories = filter_form.apply(Category.objects.order_by("name"))
+        page_obj, page_size, page_sizes = paginate(self.request, categories)
         context.update(
             {
                 "categories": page_obj,
                 "page_obj": page_obj,
                 "page_size": page_size,
                 "page_sizes": page_sizes,
+                **filter_form.filter_context(),
             }
         )
         return context

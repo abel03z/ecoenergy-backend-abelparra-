@@ -157,3 +157,54 @@ class ZoneCrudTests(TestCase):
         self.assertEqual(len(r.context["page_obj"]), 15)
         r = self.client.get(reverse("organizations:zone_list"), {"page_size": 7})
         self.assertEqual(len(r.context["page_obj"]), 15)
+
+
+class ZoneFilterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.norte = Organization.objects.create(name="Norte")
+        cls.sur = Organization.objects.create(name="Sur")
+        cls.ops = Department.objects.create(organization=cls.norte, name="Operaciones")
+        cls.adm = Department.objects.create(organization=cls.norte, name="Administración")
+        cls.ops_sur = Department.objects.create(organization=cls.sur, name="Operaciones")
+        Zone.objects.create(department=cls.ops, name="Planta A", consumption_limit=10)
+        Zone.objects.create(department=cls.ops, name="Bodega", consumption_limit=10)
+        Zone.objects.create(department=cls.adm, name="Planta B", consumption_limit=10)
+        Zone.objects.create(department=cls.ops_sur, name="Planta Sur", consumption_limit=10)
+        group = make_group("Lector zonas filtro", "zone", ("view",))
+        cls.user = make_user("z_filter", cls.norte, group)
+        cls.root = User.objects.create_superuser("z_root", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.user)
+        self.url = reverse("organizations:zone_list")
+
+    def names(self, params=None):
+        r = self.client.get(self.url, params or {})
+        self.assertEqual(r.status_code, 200)
+        return [z.name for z in r.context["page_obj"]]
+
+    def test_filtra_por_nombre(self):
+        self.assertEqual(self.names({"q": "planta"}), ["Planta A", "Planta B"])
+
+    def test_filtra_por_departamento(self):
+        self.assertEqual(self.names({"department": self.ops.pk}), ["Bodega", "Planta A"])
+
+    def test_combina_nombre_y_departamento(self):
+        self.assertEqual(self.names({"q": "planta", "department": self.adm.pk}), ["Planta B"])
+
+    def test_no_se_puede_filtrar_por_departamento_de_otra_organizacion(self):
+        # inválido para este usuario: se ignora y no aparecen zonas de Sur
+        result = self.names({"department": self.ops_sur.pk})
+        self.assertNotIn("Planta Sur", result)
+        self.assertEqual(len(result), 3)
+
+    def test_superusuario_ve_departamentos_con_su_organizacion(self):
+        self.client.force_login(self.root)
+        r = self.client.get(self.url)
+        labels = [label for _, label in r.context["filter_form"].fields["department"].choices]
+        self.assertIn("Operaciones · Norte", labels)
+        self.assertIn("Operaciones · Sur", labels)
+
+    def test_sin_resultados(self):
+        self.assertContains(self.client.get(self.url, {"q": "zzz"}), "Ninguna zona coincide con los filtros.")

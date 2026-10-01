@@ -303,3 +303,96 @@ class MaintenanceExcelExportTests(TestCase):
         self.client.force_login(self.viewer)
         r = self.client.get(reverse("monitoring:maintenance_list"))
         self.assertContains(r, reverse("monitoring:maintenance_export"))
+
+
+class MaintenanceFilterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.norte = Organization.objects.create(name="Norte")
+        cls.sur = Organization.objects.create(name="Sur")
+        d_norte = Department.objects.create(organization=cls.norte, name="Ops N")
+        d_sur = Department.objects.create(organization=cls.sur, name="Ops S")
+        zone_norte = Zone.objects.create(department=d_norte, name="ZN", consumption_limit=10)
+        zone_sur = Zone.objects.create(department=d_sur, name="ZS", consumption_limit=10)
+        category = Category.objects.create(name="Medidor")
+        maker = Manufacturer.objects.create(name="Acme")
+        cls.bomba = Device.objects.create(name="Bomba 1", zone=zone_norte, category=category, manufacturer=maker)
+        cls.sensor = Device.objects.create(name="Sensor 1", zone=zone_norte, category=category, manufacturer=maker)
+        cls.dev_sur = Device.objects.create(name="Bomba Sur", zone=zone_sur, category=category, manufacturer=maker)
+
+        group = make_group("Lector mant filtro", ("view",))
+        cls.user = make_user("mf_user", cls.norte, group)
+        cls.tech = make_user("mf_tech", cls.norte, group)
+        cls.tech_sur = make_user("mf_tech_sur", cls.sur, group)
+
+        when = timezone.now() + timedelta(days=2)
+        P, C = Maintenance.Type.PREVENTIVE, Maintenance.Type.CORRECTIVE
+        cls.m1 = Maintenance.objects.create(device=cls.bomba, type=P, scheduled_at=when,
+                                            status=Maintenance.Status.PENDING, technician=cls.tech)
+        cls.m2 = Maintenance.objects.create(device=cls.bomba, type=C, scheduled_at=when + timedelta(hours=1),
+                                            status=Maintenance.Status.IN_PROGRESS)
+        cls.m3 = Maintenance.objects.create(device=cls.sensor, type=C, scheduled_at=when + timedelta(hours=2),
+                                            status=Maintenance.Status.PENDING)
+        cls.m_sur = Maintenance.objects.create(device=cls.dev_sur, type=P, scheduled_at=when,
+                                               status=Maintenance.Status.PENDING)
+
+    def setUp(self):
+        self.client.force_login(self.user)
+        self.url = reverse("monitoring:maintenance_list")
+
+    def ids(self, params=None):
+        r = self.client.get(self.url, params or {})
+        self.assertEqual(r.status_code, 200)
+        return {m.pk for m in r.context["page_obj"]}
+
+    def test_sin_filtros_solo_mi_organizacion(self):
+        self.assertEqual(self.ids(), {self.m1.pk, self.m2.pk, self.m3.pk})
+
+    def test_filtra_por_dispositivo(self):
+        self.assertEqual(self.ids({"q": "bomba"}), {self.m1.pk, self.m2.pk})  # no incluye "Bomba Sur"
+
+    def test_filtra_por_tipo(self):
+        self.assertEqual(self.ids({"type": Maintenance.Type.CORRECTIVE}), {self.m2.pk, self.m3.pk})
+
+    def test_filtra_por_estado(self):
+        self.assertEqual(self.ids({"status": Maintenance.Status.IN_PROGRESS}), {self.m2.pk})
+
+    def test_filtra_por_tecnico(self):
+        self.assertEqual(self.ids({"technician": self.tech.pk}), {self.m1.pk})
+
+    def test_combina_filtros(self):
+        self.assertEqual(
+            self.ids({"q": "bomba", "type": Maintenance.Type.CORRECTIVE}), {self.m2.pk}
+        )
+
+    def test_tecnico_de_otra_organizacion_se_ignora(self):
+        self.assertEqual(self.ids({"technician": self.tech_sur.pk}), {self.m1.pk, self.m2.pk, self.m3.pk})
+
+    def test_valores_invalidos_se_ignoran(self):
+        self.assertEqual(self.ids({"type": "XXX", "status": "YYY", "technician": "abc"}),
+                         {self.m1.pk, self.m2.pk, self.m3.pk})
+
+    def test_sin_resultados(self):
+        r = self.client.get(self.url, {"q": "zzz"})
+        self.assertContains(r, "Ninguna mantención coincide con los filtros.")
+
+    def test_el_boton_de_excel_conserva_los_filtros(self):
+        r = self.client.get(self.url, {"type": Maintenance.Type.CORRECTIVE})
+        self.assertContains(r, "maintenances/export/?type=CORRECTIVE&amp;")
+        self.assertContains(r, "(con filtros)")
+
+    def test_el_excel_respeta_los_filtros_y_el_scoping(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        perm_group = Group.objects.get(name="Lector mant filtro")
+        self.assertTrue(perm_group.permissions.filter(codename="view_maintenance").exists())
+        r = self.client.get(reverse("monitoring:maintenance_export"), {"type": Maintenance.Type.CORRECTIVE})
+        self.assertEqual(r.status_code, 200)
+        ws = load_workbook(BytesIO(r.content)).active
+        ids = {row[0] for row in ws.iter_rows(min_row=2, values_only=True)}
+        self.assertEqual(ids, {self.m2.pk, self.m3.pk})
+        # sin filtros: todas las de mi organización, nunca las de Sur
+        r = self.client.get(reverse("monitoring:maintenance_export"))
+        ws = load_workbook(BytesIO(r.content)).active
+        ids = {row[0] for row in ws.iter_rows(min_row=2, values_only=True)}
+        self.assertEqual(ids, {self.m1.pk, self.m2.pk, self.m3.pk})

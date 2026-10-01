@@ -10,6 +10,9 @@
     {% endif %}
 </div>
 
+{% url 'devices:category_list' as list_url %}
+{% include "includes/filter_bar.html" with action=list_url %}
+
 <table class="table table-hover align-middle">
     <thead class="table-light">
         <tr>
@@ -41,7 +44,7 @@
         {% empty %}
         <tr>
             <td colspan="{% if perms.devices.change_category or perms.devices.delete_category %}2{% else %}1{% endif %}" class="text-center text-muted py-4">
-                No hay categorías registradas.
+                {% if has_filters %}Ninguna categoría coincide con los filtros.{% else %}No hay categorías registradas.{% endif %}
             </td>
         </tr>
         {% endfor %}

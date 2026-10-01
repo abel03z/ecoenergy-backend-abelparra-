@@ -1,11 +1,10 @@
 from pathlib import Path
 
-from urllib.parse import urlencode
-
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_image_file_extension
 
+from core.filters import FilterFormMixin
 from organizations.models import Zone
 from .models import Category, Device, Manufacturer
 from .validators import validate_real_image
@@ -101,7 +100,7 @@ class DeviceForm(forms.ModelForm):
         return image
 
 
-class DeviceFilterForm(forms.Form):
+class DeviceFilterForm(FilterFormMixin, forms.Form):
     """Filtros del listado de dispositivos (GET). Todos son opcionales."""
 
     q = forms.CharField(
@@ -135,8 +134,7 @@ class DeviceFilterForm(forms.Form):
 
     def apply(self, queryset):
         """Aplica los filtros válidos; los valores inválidos se ignoran."""
-        self.is_valid()  # cleaned_data conserva los campos que sí son válidos
-        data = getattr(self, "cleaned_data", {})
+        data = self.current_filters()
         if data.get("q"):
             queryset = queryset.filter(name__icontains=data["q"].strip())
         if data.get("category"):
@@ -147,13 +145,17 @@ class DeviceFilterForm(forms.Form):
             queryset = queryset.filter(zone=data["zone"])
         return queryset
 
-    def query_string(self):
-        """Filtros vigentes como query string ('' o 'a=1&b=2&') para conservarlos al paginar."""
-        data = getattr(self, "cleaned_data", {})
-        params = {}
+
+class CategoryFilterForm(FilterFormMixin, forms.Form):
+    q = forms.CharField(
+        required=False,
+        max_length=100,
+        label="Buscar",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Nombre de la categoría"}),
+    )
+
+    def apply(self, queryset):
+        data = self.current_filters()
         if data.get("q"):
-            params["q"] = data["q"].strip()
-        for name in ("category", "manufacturer", "zone"):
-            if data.get(name):
-                params[name] = data[name].pk
-        return urlencode(params) + "&" if params else ""
+            queryset = queryset.filter(name__icontains=data["q"].strip())
+        return queryset

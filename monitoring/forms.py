@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from core.filters import FilterFormMixin
 from devices.models import Device
 
 from .models import Maintenance
@@ -86,3 +87,45 @@ class MaintenanceForm(forms.ModelForm):
                     "Ya existe una mantención de ese tipo para el dispositivo en esa fecha."
                 )
         return cleaned
+
+
+class MaintenanceFilterForm(FilterFormMixin, forms.Form):
+    q = forms.CharField(
+        required=False,
+        max_length=100,
+        label="Dispositivo",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Nombre del dispositivo"}),
+    )
+    type = forms.ChoiceField(
+        required=False, label="Tipo",
+        choices=[("", "Todos")] + list(Maintenance.Type.choices),
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    status = forms.ChoiceField(
+        required=False, label="Estado",
+        choices=[("", "Todos")] + list(Maintenance.Status.choices),
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    technician = forms.ModelChoiceField(
+        queryset=User.objects.none(), required=False, label="Técnico",
+        empty_label="Todos", widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    def __init__(self, *args, organization=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        technicians = User.objects.filter(is_active=True)
+        if organization is not None:
+            technicians = technicians.filter(profile__organization=organization)
+        self.fields["technician"].queryset = technicians.order_by("username")
+
+    def apply(self, queryset):
+        data = self.current_filters()
+        if data.get("q"):
+            queryset = queryset.filter(device__name__icontains=data["q"].strip())
+        if data.get("type"):
+            queryset = queryset.filter(type=data["type"])
+        if data.get("status"):
+            queryset = queryset.filter(status=data["status"])
+        if data.get("technician"):
+            queryset = queryset.filter(technician=data["technician"])
+        return queryset
