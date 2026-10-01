@@ -19,14 +19,21 @@ Crea (más de 1.000 registros de negocio, reproducibles con semilla fija):
     consulta_sur     -> grupo "Consulta", organización Sur
     staff_sin_perfil -> staff sin UserProfile (caso límite: sin organización asignada)
 
-Todas las contraseñas de las cuentas de prueba son "Ecoenergy2026*" (cuentas de
-prueba documentadas en el README, no son credenciales personales).
+Contraseña de las cuentas de prueba: NO está escrita en el código ni en el README.
+Se toma de la variable de entorno SEED_PASSWORD (debe cumplir la política de
+contraseñas) o, si no está definida, se genera una aleatoria y se muestra al final
+de la ejecución para entregarla en la demostración.
 """
+import os
 import random
+import secrets
+import string
 from datetime import timedelta
 
 from django.contrib.auth.models import Group, Permission, User
-from django.core.management.base import BaseCommand
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
@@ -35,7 +42,19 @@ from devices.models import Category, Device, DeviceAssignment, Manufacturer
 from monitoring.models import Alert, Maintenance, Measurement
 from organizations.models import Department, Organization, Zone
 
-TEST_PASSWORD = "Ecoenergy2026*"
+
+
+def generate_password():
+    """Contraseña aleatoria de 16 caracteres que cumple la política (mayús, minús, número, especial)."""
+    chars = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.digits),
+        secrets.choice("!@#$%*"),
+    ] + [secrets.choice(string.ascii_letters + string.digits) for _ in range(12)]
+    secrets.SystemRandom().shuffle(chars)
+    return "".join(chars)
+
 
 GROUP_PERMS = {
     "Administrador organizacional": [
@@ -107,6 +126,15 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        self.password_from_env = bool(os.getenv("SEED_PASSWORD"))
+        self.password = os.getenv("SEED_PASSWORD") or generate_password()
+        try:
+            validate_password(self.password)
+        except ValidationError as error:
+            raise CommandError(
+                "SEED_PASSWORD no cumple la política de contraseñas: " + " ".join(error.messages)
+            )
+
         if options["reset"]:
             self._reset()
 
@@ -118,7 +146,8 @@ class Command(BaseCommand):
 
         self._print_summary()
         self.stdout.write(self.style.SUCCESS("Datos de prueba de EcoEnergy cargados correctamente."))
-        self.stdout.write(f"Contraseña de todas las cuentas de prueba: {TEST_PASSWORD}")
+        origin = "definida en SEED_PASSWORD" if self.password_from_env else "generada para esta ejecución"
+        self.stdout.write(f"Contraseña de todas las cuentas de prueba ({origin}): {self.password}")
 
     def _reset(self):
         self.stdout.write("Borrando datos de prueba anteriores...")
@@ -229,7 +258,7 @@ class Command(BaseCommand):
             defaults={"is_staff": True, "is_superuser": True, "email": "admin@ecoenergy.test"},
         )
         if created:
-            admin.set_password(TEST_PASSWORD)
+            admin.set_password(self.password)
             admin.save()
         UserProfile.objects.create(
             user=admin,
@@ -240,7 +269,7 @@ class Command(BaseCommand):
 
         admin_norte = User.objects.create_user(
             username="admin_norte", email="admin_norte@ecoenergy.test",
-            password=TEST_PASSWORD, is_staff=True
+            password=self.password, is_staff=True
         )
         admin_norte.groups.add(groups["Administrador organizacional"])
         UserProfile.objects.create(
@@ -252,7 +281,7 @@ class Command(BaseCommand):
 
         operador1 = User.objects.create_user(
             username="Operador1", email="operador1@ecoenergy.test",
-            password=TEST_PASSWORD, is_staff=True
+            password=self.password, is_staff=True
         )
         operador1.groups.add(groups["Operador"])
         UserProfile.objects.create(
@@ -264,7 +293,7 @@ class Command(BaseCommand):
 
         operador2 = User.objects.create_user(
             username="Operador2", email="operador2@ecoenergy.test",
-            password=TEST_PASSWORD, is_staff=True
+            password=self.password, is_staff=True
         )
         operador2.groups.add(groups["Operador"])
         UserProfile.objects.create(
@@ -276,7 +305,7 @@ class Command(BaseCommand):
 
         consulta_sur = User.objects.create_user(
             username="consulta_sur", email="consulta_sur@ecoenergy.test",
-            password=TEST_PASSWORD, is_staff=True
+            password=self.password, is_staff=True
         )
         consulta_sur.groups.add(groups["Consulta"])
         UserProfile.objects.create(
@@ -289,7 +318,7 @@ class Command(BaseCommand):
         # Caso límite: staff sin UserProfile (sin organización asignada).
         staff_sin_perfil = User.objects.create_user(
             username="staff_sin_perfil", email="staff_sin_perfil@ecoenergy.test",
-            password=TEST_PASSWORD, is_staff=True
+            password=self.password, is_staff=True
         )
         staff_sin_perfil.groups.add(groups["Operador"])
 
