@@ -1,184 +1,180 @@
-# EcoEnergy — Fase 1 y 2
+# EcoEnergy
 
-Aplicación Django del lado del servidor para consultar zonas de consumo energético y sus dispositivos, usando archivos JSON como fuente de datos (sin Models ni base de datos).
+Aplicación web en Django para monitorear el consumo energético de dos organizaciones: zonas, dispositivos, mediciones, alertas y mantenciones, con autenticación, roles, permisos y datos separados por organización.
+
+Proyecto de **Programación Back End** (INACAP La Serena) · Evaluación Formativa, Unidad II.
 
 ## Requisitos
 
-- Python 3.14
-- Django 6.1 (ver `requirements.txt`)
+- Python 3.12 o superior (probado con 3.12 y 3.13)
+- Los paquetes de `requirements.txt`: Django 6.1, Pillow, openpyxl, humanize y python-dotenv
+- No necesita un motor de base de datos externo: por defecto usa SQLite (también se puede usar MySQL, ver más abajo)
 
-## Instalación
+## Instalación y puesta en marcha
 
 ```bash
 git clone <URL-del-repositorio>
 cd ecoenergy-backend-abelparra-
+
 python -m venv .venv
-source .venv/bin/activate      # Linux/Mac (bash)
-# source .venv/bin/activate.fish   # si usas fish shell
+source .venv/bin/activate            # Linux/Mac (bash)
+# source .venv/bin/activate.fish     # si usas fish
+# .venv\Scripts\activate             # Windows
 pip install -r requirements.txt
-```
 
-## Ejecución
+cp .env.example .env                 # variables de entorno (ver tabla más abajo)
 
-```bash
+python manage.py migrate             # crea las tablas
+python manage.py seed_ecoenergy      # carga los datos de prueba (más de 1.000 registros)
 python manage.py runserver
 ```
 
-Luego abrir en el navegador: `http://127.0.0.1:8000/`
+Luego abrir `http://127.0.0.1:8000/` e ingresar con alguno de los usuarios de prueba.
 
-## Rutas funcionales
+Para ejecutar las pruebas automáticas:
 
-| Ruta | Descripción |
+```bash
+python manage.py test
+```
+
+## Variables de entorno
+
+Se definen en el archivo `.env` (que **no** se versiona). `.env.example` trae la lista completa con comentarios.
+
+| Variable | Para qué sirve | Valor por defecto |
+|---|---|---|
+| `SECRET_KEY` | Clave secreta de Django. Generar una propia con `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` | Si está vacía, usa una temporal solo para desarrollo |
+| `DEBUG` | Modo desarrollo | `True` |
+| `ALLOWED_HOSTS` | Hosts permitidos, separados por coma (obligatorio si `DEBUG=False`) | vacío |
+| `SEED_PASSWORD` | Contraseña de las cuentas de prueba que crea el seed | Si está vacía, se genera una aleatoria |
+| `DB_ENGINE` | `sqlite` o `mysql` | `sqlite` |
+| `DB_NAME` | Archivo SQLite o nombre de la base MySQL | `db.sqlite3` |
+| `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | Solo si `DB_ENGINE=mysql` (requiere instalar además el driver `mysqlclient`) | — |
+| `EMAIL_BACKEND` | Cómo se envía el correo con el código de recuperación | Imprime el correo en la consola del servidor |
+| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` | Solo si se usa SMTP real | — |
+| `PASSWORD_RESET_CODE_TTL` | Segundos de vigencia del código de recuperación | `300` |
+| `PASSWORD_RESET_DEMO_MODE` | Solo para demostraciones sin correo: muestra el código en pantalla. Dejar en `False` | `False` |
+
+## Base de datos y migraciones
+
+La conexión se configura solo con variables de entorno (`DB_*`). Las migraciones están versionadas y son reproducibles:
+
+```bash
+python manage.py migrate                 # aplica las migraciones
+python manage.py makemigrations --check  # verifica que los modelos y las migraciones coinciden
+```
+
+## Carga de datos de prueba (seed)
+
+```bash
+python manage.py seed_ecoenergy           # carga los datos (falla si ya existen)
+python manage.py seed_ecoenergy --reset   # borra los datos de prueba anteriores y los vuelve a cargar
+```
+
+El comando usa una semilla fija, así que cada ejecución produce la misma estructura de datos. Carga **1.197 registros de negocio vigentes**, repartidos entre las dos organizaciones para probar relaciones, permisos y paginación:
+
+| Tabla | Registros |
 |---|---|
-| `/` | Página de inicio |
-| `/dispositivos/` | Catálogo simple de dispositivos (ejemplo de clase) |
-| `/zonas/` | Listado de todas las zonas de consumo |
-| `/zonas/<id>/` | Detalle de una zona: dispositivos, categoría, consumo total y estado (NORMAL/ALERTA) |
-| `/resumen-zonas/` | Resumen de consumo por zona: totales generales (zonas, dispositivos, consumo) y tabla con dispositivos, consumo, límite y estado (DENTRO DEL LÍMITE/LÍMITE SUPERADO) por zona |
+| Organization | 2 |
+| Department | 11 |
+| Zone | 24 |
+| Category | 8 |
+| Manufacturer | 6 |
+| Device | 154 |
+| DeviceAssignment | 62 |
+| Measurement | 596 |
+| Alert | 192 |
+| Maintenance | 142 |
 
-## Datos
+Además crea algunos registros **eliminados lógicamente** (con `deleted_at`) para comprobar que no aparecen en listados, resúmenes ni en el Excel. Al terminar imprime el detalle de lo cargado.
 
-Los datos viven en `data/zonas.json`, `data/categorias.json` y `data/dispositivos.json`. Se leen dinámicamente en cada request desde `dispositivos/data_access.py`, por lo que agregar o modificar registros en los JSON se refleja automáticamente sin tocar código.
+### Contraseña de las cuentas de prueba
 
-## Pruebas realizadas
+La contraseña **no está escrita en el repositorio**. Se obtiene de una de estas dos formas:
 
-- Listado de zonas con cantidad de dispositivos correcta.
-- Detalle de zona con cálculo dinámico de consumo total y estado (NORMAL/ALERTA).
-- Zona sin dispositivos: muestra mensaje y no rompe la app.
-- Zona con id inexistente: responde 404 controlado.
-- Agregar registros nuevos al JSON: se reflejan sin modificar código.
-- `python manage.py check`: sin errores.
+- Definiendo `SEED_PASSWORD` en el `.env` antes de correr el seed (debe cumplir la política de contraseñas), o
+- Dejándola vacía: el seed genera una aleatoria y la **muestra al final de la ejecución**.
 
-## Paquete externo utilizado
+Con `--reset` y sin `SEED_PASSWORD` se genera una contraseña nueva cada vez.
 
-- **humanize**: formatea el consumo total con separador de miles para mejorar la legibilidad en la interfaz.
+## Usuarios de prueba
 
-## Fase 2 — Resumen de consumo por zona
+Los crea `seed_ecoenergy`. Todos usan la misma contraseña (ver la sección anterior) y un correo `<usuario en minúsculas>@ecoenergy.test`.
 
-Se agregó una tercera interfaz, `/resumen-zonas/`, sin reemplazar el listado ni el detalle existentes. La vista (`dispositivos.views.resumen_zonas`) usa `dispositivos/data_access.py` para cargar y relacionar `zonas.json` y `dispositivos.json`, calcular por zona la cantidad de dispositivos, el consumo total y el estado según la regla de negocio, y construir los totales generales (zonas, dispositivos, consumo total). El template solo presenta esos valores, sin lógica de agregación.
+| Usuario | Rol | Organización | Qué demuestra |
+|---|---|---|---|
+| `ADMIN` | Superusuario | — | Acceso completo, ve datos de ambas organizaciones |
+| `admin_norte` | Administrador organizacional | EcoEnergy Norte | CRUD completo, solo sobre datos de Norte |
+| `Operador1` | Operador | EcoEnergy Norte | Ve dispositivos, crea y edita mantenciones, no elimina |
+| `Operador2` | Operador | EcoEnergy Sur | Mismo rol que `Operador1`, pero en Sur (no ve datos de Norte) |
+| `consulta_sur` | Consulta | EcoEnergy Sur | Solo lectura sobre datos de Sur |
+| `staff_sin_perfil` | Operador sin `UserProfile` | — | Caso límite: sin organización asignada, se le deniega el acceso |
 
-**Regla de negocio (nueva, distinta a NORMAL/ALERTA del detalle de zona):**
-
-| Condición | Estado |
-|---|---|
-| `consumo_total <= limite_kwh` | DENTRO DEL LÍMITE |
-| `consumo_total > limite_kwh` | LÍMITE SUPERADO |
-
-Una zona sin dispositivos asociados también aparece en la tabla, con cantidad 0, consumo 0 y estado DENTRO DEL LÍMITE.
-
-### Pruebas realizadas (Fase 2)
-
-- Nuevos registros: agregar zonas/dispositivos válidos en los JSON se refleja sin tocar código ni templates.
-- Mayor volumen: al aumentar temporalmente la cantidad de zonas y dispositivos, los totales y la tabla se recalculan correctamente y la navegación sigue accesible.
-- Zona sin dispositivos: aparece en la tabla con 0 dispositivos, 0 kWh de consumo y estado DENTRO DEL LÍMITE.
-- Colección de zonas vacía: la página permanece operativa y muestra un mensaje ("No hay zonas disponibles").
-- Estados: se probaron consumos bajo, igual y sobre el límite; el texto y el color (badge verde/rojo) corresponden a la regla.
-- `python manage.py check`: sin errores.
-
-
-
-## Unidad 2 — Modelos, identidad y autorización
-
-Junto a la app `dispositivos` (Fase 1/2, basada en JSON), el proyecto incorpora apps Django reales con Models/ORM: `core`, `organizations`, `devices`, `monitoring` y `accounts`.
-
-### Clase 4 — Usuarios, perfiles, grupos y permisos
-
-Se agregó la app `accounts` con el modelo `UserProfile`, que conecta el `User` de Django (autenticación) con el dominio de negocio:
-
-- `UserProfile`: `OneToOneField` a `settings.AUTH_USER_MODEL`, `ForeignKey` a `organizations.Organizacion` y `organizations.Departamento` (opcional), `employee_code` único, `phone`.
-- Validación de coherencia (`clean()`): el `departamento` seleccionado debe pertenecer a la `organizacion` del perfil.
-- Registrado en Django Admin con búsqueda y filtros por organización/departamento.
-
-**Roles (Groups) y permisos definidos:**
+**Permisos por rol**
 
 | Grupo | Permisos |
 |---|---|
-| Administrador organizacional | add/change/view sobre Organizacion, Departamento, Zona, Categoria, Dispositivo |
-| Operador | view sobre Dispositivo; add/view sobre Medicion; view/change sobre Alerta |
-| Consulta | solo view sobre Dispositivo, Medicion, Alerta |
+| Administrador organizacional | add/change/view sobre Organization y Department · add/change/delete/view sobre Zone, Category, Device y Maintenance |
+| Operador | view sobre Device · add/view sobre Measurement · view/change sobre Alert · add/change/view sobre Maintenance |
+| Consulta | solo view sobre Device, Measurement, Alert y Maintenance |
 
-### Pruebas realizadas (Clase 4)
+## Funcionalidades y dónde están
 
-- Usuario de prueba `Operador1` (`is_staff=True`, sin superuser, grupo `Operador`, sin permisos individuales extra) con su `UserProfile` asociado.
-- **Acción permitida:** `Operador1` creó una `Medicion` para un `Dispositivo` existente sin error.
-- **Acción denegada:** `Operador1` recibió `403 Forbidden` al intentar acceder directo a `/admin/devices/dispositivo/add/`.
-- `python manage.py makemigrations` / `migrate`: sin errores.
+| Funcionalidad | Ruta | Código principal |
+|---|---|---|
+| Login / logout (sistema de autenticación de Django) | `/accounts/login/` | `config/urls.py`, `templates/registration/` |
+| Recuperación de contraseña con código de 6 dígitos | `/accounts/password-reset/` | `accounts/views.py`, `accounts/models.py` |
+| Política de contraseña (10+ caracteres, mayúscula, minúscula, número y especial) | — | `accounts/validators.py`, `AUTH_PASSWORD_VALIDATORS` en `config/settings.py` |
+| CRUD de dispositivos (con imagen) | `/devices/` | `devices/views.py`, `devices/forms.py`, `devices/validators.py` |
+| CRUD de categorías | `/devices/categories/` | `devices/views.py` |
+| CRUD de zonas | `/organizations/zones/` | `organizations/views.py`, `organizations/forms.py` |
+| CRUD de mantenciones | `/monitoring/maintenances/` | `monitoring/views.py`, `monitoring/forms.py` |
+| Exportación a Excel (.xlsx) | `/monitoring/maintenances/export/` | `monitoring/exports.py` |
+| Zonas y resumen de consumo (desde la base de datos) | `/zonas/`, `/resumen-zonas/` | `dispositivos/views.py` |
+| Django Admin con scoping por organización | `/admin/` | `*/admin.py`, `core/admin_utils.py` |
 
-### Clase 5 — Seguridad en Django Admin y scoping por organización
+### Modelo de datos
 
-Se implementó scoping por organización en `devices/admin.py` y `monitoring/admin.py` (Dispositivo, Medicion, Alerta y Mantenimiento): cada usuario no-superusuario solo ve y edita datos de su propia organización, resuelta vía `request.user.profile.organizacion` (`core/admin_utils.get_user_organization`). Se aplica con `get_queryset` (filtra el listado), `formfield_for_foreignkey` (limita los selectores de FK) y `has_change_permission`/`has_delete_permission` (bloquea edición/borrado cruzado). También se agregó un `DepartamentoInline` en `OrganizacionAdmin` y la acción personalizada `archive_dispositivos` (borrado lógico vía `deleted_at`).
+- **6 tablas maestras:** `Organization`, `Department`, `Zone`, `Category`, `Manufacturer`, `Device`
+- **4 tablas operacionales:** `DeviceAssignment`, `Measurement`, `Alert`, `Maintenance`
+- **Autenticación:** `UserProfile` (une al usuario con su organización y departamento) y `PasswordResetCode`
+- Los nombres de modelos, tablas y campos están en inglés; las relaciones usan `ForeignKey` y `OneToOneField`.
 
-## Evaluación Sumativa II — Puesta en marcha desde cero
+### Estructura del proyecto
+
+| App | Responsabilidad |
+|---|---|
+| `core` | Modelo base con borrado lógico, paginación, filtros, utilidades de scoping y el comando `seed_ecoenergy` |
+| `accounts` | Perfiles de usuario, recuperación de contraseña y validadores |
+| `organizations` | Organizaciones, departamentos y zonas |
+| `devices` | Categorías, fabricantes y dispositivos |
+| `monitoring` | Mediciones, alertas y mantenciones; exportación a Excel |
+| `dispositivos` | Página de inicio y vistas de zonas y resumen |
+
+### Decisiones de diseño
+
+- **Borrado lógico:** todas las entidades de negocio heredan de `core.models.BaseModel` y tienen `deleted_at`. El manager `objects` solo devuelve registros vigentes y `all_objects` incluye los eliminados. Eliminar marca `deleted_at`; no hay eliminación física en el flujo normal.
+- **Eliminación segura:** solo por `POST` con CSRF, con confirmación de SweetAlert2. El servidor verifica autenticación, permiso y organización antes de ejecutar la acción; la confirmación visual no reemplaza esa validación.
+- **Scoping por organización:** los listados, formularios, el Excel y las vistas de zonas y resumen solo muestran datos de la organización del usuario (el superusuario ve todo). Un registro de otra organización responde 404.
+- **Paginación:** 5, 15 o 30 registros por página (5 por defecto). La elección se guarda en `request.session` y los valores no permitidos se ignoran.
+- **Filtros:** los listados de dispositivos, categorías, zonas y mantenciones se pueden filtrar; los filtros se conservan al paginar y el Excel respeta los filtros activos.
+- **Imágenes:** se validan por tamaño (máx. 2 MB), extensión (JPG/PNG) y contenido real con Pillow. Los archivos subidos van a `media/`, que no se versiona.
+- **Recuperación de contraseña:** código de 6 dígitos generado con `secrets`, guardado hasheado, con vigencia limitada (`PASSWORD_RESET_CODE_TTL`), máximo 5 intentos fallidos y de un solo uso. Por defecto el correo se imprime en la consola del servidor. Para probarlo: `/accounts/password-reset/` con, por ejemplo, `operador1@ecoenergy.test`, y mirar la terminal donde corre `runserver`.
+- **Idioma y tema:** interfaz en español (`es-cl`) con modo claro y oscuro (botón en la barra superior; recuerda la preferencia).
+
+## Pruebas
 
 ```bash
-git clone <URL-del-repositorio>
-cd ecoenergy-backend-abelparra-
-python -m venv .venv
-source .venv/bin/activate           # Linux/Mac (bash)
-# source .venv/bin/activate.fish    # fish shell
-pip install -r requirements.txt
-
-cp .env.example .env                # deja DB_ENGINE=sqlite para probar sin motor externo
-
-python manage.py migrate
-python manage.py seed_ecoenergy     # carga datos de prueba (usar --reset para recargar)
-python manage.py runserver
+python manage.py test
 ```
 
-Luego entrar a `http://127.0.0.1:8000/admin/`.
+La suite cubre autenticación y recuperación de contraseña, política de contraseñas, permisos y scoping de cada CRUD, borrado lógico, validaciones de formularios y de imágenes, paginación con sesión, filtros, exportación a Excel y el seed.
 
-### Cuentas de prueba (creadas por `seed_ecoenergy`)
+## Flujo de trabajo con Git
 
-Todas son cuentas de prueba documentadas, no credenciales personales. Contraseña para todas: `Ecoenergy2026*`.
+Después del primer push, el trabajo se hizo en ramas (`feature/...`, `refactor/...`) integradas a `main` mediante Pull Requests con commits descriptivos. `.env`, `db.sqlite3`, `media/` y los entornos virtuales están en `.gitignore`.
 
-| Usuario | Rol / grupo | Organización | Qué demuestra |
-|---|---|---|---|
-| `ADMIN` | Superusuario | — | Acceso completo, ve datos de ambas organizaciones |
-| `admin_norte` | Administrador organizacional | EcoEnergy Norte | Alta/edición de organización, departamentos, zonas, dispositivos — solo Norte |
-| `Operador1` | Operador | EcoEnergy Norte | Ve dispositivos, carga mediciones, gestiona alertas — solo Norte |
-| `Operador2` | Operador | EcoEnergy Sur | Mismo rol que Operador1, pero en Sur (para probar que no ve datos de Norte) |
-| `consulta_sur` | Consulta | EcoEnergy Sur | Solo lectura sobre dispositivos/mediciones/alertas de Sur |
-| `staff_sin_perfil` | Operador (sin `UserProfile`) | — | Caso límite: usuario staff sin organización asignada → `PermissionDenied` al entrar al Admin |
+## Documentación adicional
 
-### Datos cargados
-
-2 organizaciones (EcoEnergy Norte, EcoEnergy Sur) con sus propios departamentos, zonas, categorías, dispositivos, mediciones y alertas — suficientes para demostrar que un usuario de una organización no ve ni modifica datos de la otra.
-
-### Clase 8 — Archivos, imágenes y confirmaciones
-
-Se extendió el CRUD protegido de `Dispositivo` (app `devices`) con una imagen opcional y eliminación confirmada con SweetAlert2.
-
-**Qué se agregó**
-
-- `MEDIA_URL = "/media/"` y `MEDIA_ROOT = BASE_DIR / "media"` en `config/settings.py`; `config/urls.py` sirve `MEDIA` solo con `DEBUG=True`. `media/` ya está en `.gitignore`.
-- `Dispositivo.image` (`ImageField`, `upload_to="devices/%Y/%m/"`, `blank=True`) + migración `0002_dispositivo_image`. Se agregó `pillow` a `requirements.txt`.
-- `DispositivoForm` (`devices/forms.py`) con validación por capas: `accept` en el navegador (solo orienta), tamaño máx. 2 MB, extensión (`.jpg`, `.jpeg`, `.png`) y contenido real con Pillow (`devices/validators.py::validate_real_image`).
-- Vistas `DispositivoCreateView`, `DispositivoUpdateView` y `DispositivoDeleteView` (`devices/views.py`), rutas `devices/dispositivos/new|<pk>/edit|<pk>/delete/`.
-- El dashboard muestra la miniatura (o "Sin imagen") comprobando `dispositivo.image` antes de usar `.url`.
-- `base.html` carga SweetAlert2 y expone `{% block scripts %}`; el botón "Eliminar" abre la confirmación y solo tras confirmar envía el formulario POST (con `csrf_token`). Si la librería no carga, se usa `confirm()`.
-- `seed_ecoenergy`: el grupo "Administrador organizacional" ahora también tiene `delete_dispositivo` (sin ese permiso nadie, salvo superusuario, podría eliminar).
-
-**Seguridad en el servidor (SweetAlert2 solo mejora la UX)**
-
-- Eliminar acepta solo `POST` (`GET` responde 405), exige CSRF, login y `devices.delete_dispositivo`.
-- Alcance por organización: el queryset filtra `zona__departamento__organizacion` (superusuario: global). Editar o eliminar un `pk` de otra organización responde 404. El selector de zona del formulario solo ofrece zonas de la organización del usuario.
-
-**Política para archivos reemplazados o eliminados**
-
-- Reemplazar o limpiar la imagen: el archivo anterior se borra del storage.
-- Eliminar el dispositivo: se borra el registro y también su archivo.
-- El borrado físico se hace con `transaction.on_commit`, para no perder el archivo si la transacción falla.
-- Editar sin subir un archivo nuevo conserva la imagen actual.
-- Si el dispositivo tiene registros protegidos (`PROTECT`), se informa con un mensaje y no se borra nada.
-- Decisión asumida: no hay historial/auditoría de imágenes; si el proyecto lo necesitara, habría que conservar los archivos anteriores.
-
-**Pruebas** (`python manage.py test devices`, 14 tests OK)
-
-| Caso | Capa que lo rechaza | Resultado |
-|---|---|---|
-| PNG válido | — | Se guarda registro y archivo |
-| PNG de más de 2 MB | `clean_image` (tamaño) | "La imagen no puede superar 2 MB."; sin registro ni archivo |
-| Imagen con extensión `.exe` | `clean_image` (extensión) | "Formato no permitido. Use JPG o PNG."; sin registro ni archivo |
-| Texto renombrado `evidencia.jpg` | Pillow (contenido) | "El archivo no es una imagen válida."; sin registro ni archivo |
-| Eliminar por GET / sin permiso / sin CSRF / otra organización | Vista | 405 / 403 / 403 / 404; el registro sigue existiendo |
-| Reemplazar imagen / eliminar dispositivo | Política | Queda 1 archivo / no queda ninguno |
+- `ANALISIS.md`: análisis de relaciones y reglas de la Fase 1.
+- `IA.md`: declaración del uso de inteligencia artificial en el proyecto.

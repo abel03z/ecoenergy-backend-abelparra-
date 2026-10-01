@@ -74,3 +74,53 @@ class SeedTests(TestCase):
         call_command("seed_ecoenergy", "--reset", stdout=StringIO())
         self.assertEqual(business_counts(), before)
         self.assertEqual(UserProfile.objects.count(), 5)
+
+
+class SeedPasswordTests(TestCase):
+    """La contraseña de las cuentas de prueba no está en el código: viene del entorno o se genera."""
+
+    def run_seed(self, **env):
+        import os
+        from unittest import mock
+        out = StringIO()
+        with mock.patch.dict(os.environ, env, clear=False):
+            if "SEED_PASSWORD" not in env:
+                os.environ.pop("SEED_PASSWORD", None)
+            call_command("seed_ecoenergy", "--reset", stdout=out)
+        return out.getvalue()
+
+    def test_usa_la_contrasena_del_entorno(self):
+        from django.contrib.auth.models import User
+        output = self.run_seed(SEED_PASSWORD="ClaveDemo#2026x")
+        self.assertIn("ClaveDemo#2026x", output)
+        self.assertTrue(User.objects.get(username="admin_norte").check_password("ClaveDemo#2026x"))
+        self.assertTrue(User.objects.get(username="ADMIN").check_password("ClaveDemo#2026x"))
+
+    def test_sin_variable_genera_una_aleatoria_que_cumple_la_politica(self):
+        import re
+        from django.contrib.auth.models import User
+        from django.contrib.auth.password_validation import validate_password
+        output = self.run_seed()
+        match = re.search(r"generada para esta ejecución\): (\S+)", output)
+        self.assertIsNotNone(match)
+        password = match.group(1)
+        validate_password(password)  # cumple 10+, mayús, minús, número y especial
+        self.assertTrue(User.objects.get(username="Operador1").check_password(password))
+
+    def test_cada_ejecucion_genera_una_contrasena_distinta(self):
+        import re
+        pattern = r"generada para esta ejecución\): (\S+)"
+        first = re.search(pattern, self.run_seed()).group(1)
+        second = re.search(pattern, self.run_seed()).group(1)
+        self.assertNotEqual(first, second)
+
+    def test_rechaza_una_contrasena_debil_del_entorno(self):
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError):
+            self.run_seed(SEED_PASSWORD="123456")
+
+    def test_la_contrasena_no_esta_escrita_en_el_codigo_ni_en_el_readme(self):
+        from pathlib import Path
+        from django.conf import settings
+        for relative in ("core/management/commands/seed_ecoenergy.py", "README.md", ".env.example"):
+            self.assertNotIn("Ecoenergy2026", (Path(settings.BASE_DIR) / relative).read_text(encoding="utf-8"))
