@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "devices",
     "monitoring",
     "accounts",
+    "rest_framework",
 ]
 
 MIDDLEWARE = [
