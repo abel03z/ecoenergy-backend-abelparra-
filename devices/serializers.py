@@ -22,6 +22,17 @@ class DeviceSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Ingrese al menos 3 caracteres.")
         return value
 
+    def validate_zone(self, zone):
+        # La organización la decide el servidor: el usuario solo puede usar zonas de la suya.
+        from .api_views import organizacion_del_usuario
+
+        request = self.context.get("request")
+        if request is not None:
+            org = organizacion_del_usuario(request.user)
+            if org is not None and zone.department.organization_id != org.pk:
+                raise serializers.ValidationError("Zona no válida para tu organización.")
+        return zone
+
     def validate_image(self, image):
         # Mismas reglas que el formulario web (Clase 8).
         if not image:
