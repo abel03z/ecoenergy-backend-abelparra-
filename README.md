@@ -178,3 +178,87 @@ Después del primer push, el trabajo se hizo en ramas (`feature/...`, `refactor/
 
 - `ANALISIS.md`: análisis de relaciones y reglas de la Fase 1.
 - `IA.md`: declaración del uso de inteligencia artificial en el proyecto.
+
+## API REST con JWT (Evaluación sumativa 3)
+
+API RESTful con Django REST Framework + Simple JWT, bajo `/api/`. Responde solo JSON.
+
+### Los seis modelos
+
+| Tipo | Modelo (app) | Relaciones | Endpoint | Métodos |
+|---|---|---|---|---|
+| Principal | `Device` (devices) | FK `Zone`, `Category`, `Manufacturer` | `/api/devices/` | GET, POST, PUT/PATCH, DELETE |
+| Principal | `Zone` (organizations) | FK `Department` (→ `Organization`) | `/api/zones/` | GET, POST, PUT/PATCH, DELETE |
+| Principal | `Category` (devices) | 1 → N `Device` | `/api/categories/` | GET, POST, PUT/PATCH, DELETE |
+| Principal | `Manufacturer` (devices) | 1 → N `Device` | `/api/manufacturers/` | GET, POST, PUT/PATCH, DELETE |
+| Operacional | `Measurement` (monitoring) | FK `Device` | `/api/measurements/` | GET lista, GET detalle |
+| Operacional | `Alert` (monitoring) | FK `Device` | `/api/alerts/` | GET lista, GET detalle |
+
+Detalle de cada recurso: `/api/<recurso>/<id>/`. Los serializers declaran los campos de forma explícita.
+
+### Autenticación y roles
+
+| Endpoint | Uso |
+|---|---|
+| `POST /api/token/` | Body `{"username", "password"}` → devuelve `access` y `refresh` |
+| `POST /api/token/refresh/` | Body `{"refresh"}` → devuelve un nuevo `access` |
+
+Se envía el access como `Authorization: Bearer <access>` (dura 30 min; el refresh, 1 día).
+
+| Usuario | Grupo | Permisos en la API |
+|---|---|---|
+| `admin_norte` | Administrador organizacional | GET, POST, PUT/PATCH, DELETE |
+| `Operador1` | Operador | Solo lectura (GET) |
+| `sin_rol_api` | (ninguno) | Autenticado, pero 403 en todo |
+
+La contraseña es `SEED_PASSWORD` (ver "Carga de datos de prueba"). No se usa el superusuario `ADMIN` para demostrar permisos.
+Los recursos con organización (dispositivos, zonas, mediciones, alertas) solo muestran datos de la organización del usuario; `Category` y `Manufacturer` son catálogos globales.
+
+### Estados HTTP
+
+| Caso | Estado |
+|---|---|
+| Consulta / actualización correcta | 200 |
+| Creación | 201 |
+| Eliminación | 204 (borrado lógico, ver abajo) |
+| Datos inválidos | 400 |
+| Sin token o token inválido | 401 |
+| Rol sin permiso (incl. usuario sin rol API) | 403 |
+| Id inexistente (o de otra organización) | 404 |
+| Escritura sobre `measurements` / `alerts` (admin) | 405 |
+| Eliminar zona/categoría/fabricante con dispositivos asociados | 409 |
+
+### Validaciones
+
+- **De campo:** nombre de al menos 3 caracteres (`Device`, `Zone`, `Category`); `consumption_limit` > 0 en `Zone`; imagen JPG/PNG de hasta 2 MB en `Device`.
+- **De relación / regla de negocio:** la zona del dispositivo y el departamento de la zona deben pertenecer a la organización del usuario; el nombre de una zona es único dentro de su departamento; los nombres de categoría y fabricante no se repiten.
+
+### Eliminación lógica
+
+`DELETE` no borra la fila: marca `deleted_at` y responde 204. El registro deja de aparecer en listas y detalle (el detalle responde 404). La misma política usa la web.
+
+### Paginación
+
+Todas las listas están paginadas: **20 registros por página**. Para otra página: `GET /api/measurements/?page=2`. Opcionalmente `?page_size=50` (máximo 100). La respuesta trae `count`, `next`, `previous` y `results`.
+
+### Levantar el proyecto y cargar los datos
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env            # definir SEED_PASSWORD
+python manage.py migrate
+python manage.py seed_ecoenergy --reset
+python manage.py runserver
+```
+
+`seed_ecoenergy` es reproducible (semilla fija) y deja **2.197 registros de dominio vigentes** (más 34 eliminados lógicamente), sin ingresar nada a mano: 2 organizaciones, 11 departamentos, 24 zonas, 8 categorías, 6 fabricantes, 154 dispositivos, 62 asignaciones, 1.596 mediciones, 192 alertas y 142 mantenciones. Ningún modelo exigido queda vacío.
+
+### Pruebas con Apidog
+
+1. En Apidog: *Importar* → Postman → `docs/apidog/ecoenergy-sumativa3.postman_collection.json`.
+2. Definir las variables de la colección: `base_url` (`http://127.0.0.1:8000`) y `password` (el valor de `SEED_PASSWORD`).
+3. Ejecutar las carpetas en orden: `0 Autenticación` guarda los tokens en variables; las demás usan esos tokens. Cada request indica el estado esperado en su nombre.
+4. Al guardar capturas o exportaciones, ocultar los JWT y la contraseña.
+
+Pruebas automáticas de la API: `python manage.py test devices.tests_api core.tests_api`.

@@ -1,38 +1,33 @@
 from rest_framework import viewsets
-from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import Device
-from .permissions import AccesoRecursoPorRol
-from .serializers import DeviceSerializer
+from core.api import Conflicto, ProtegidoMixin, organizacion_del_usuario  # noqa: F401
+
+from .models import Category, Device, Manufacturer
+from .serializers import CategorySerializer, DeviceSerializer, ManufacturerSerializer
 
 
-def organizacion_del_usuario(user):
-    """None para superusuario (ve todo); PermissionDenied si no tiene organización."""
-    if user.is_superuser:
-        return None
-    profile = getattr(user, "profile", None)
-    if profile is None or profile.organization_id is None:
-        raise PermissionDenied("El usuario no posee una organización asignada.")
-    return profile.organization
-
-
-class DeviceViewSet(viewsets.ModelViewSet):
+class DeviceViewSet(ProtegidoMixin, viewsets.ModelViewSet):
     # Device.objects ya excluye los registros eliminados lógicamente.
     queryset = Device.objects.select_related("zone", "category", "manufacturer").order_by("id")
     serializer_class = DeviceSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, AccesoRecursoPorRol]
+    scope_path = "zone__department__organization"
 
-    def get_queryset(self):
-        # Alcance: solo dispositivos de la organización del usuario.
-        qs = super().get_queryset()
-        org = organizacion_del_usuario(self.request.user)
-        if org is None:
-            return qs
-        return qs.filter(zone__department__organization=org)
+
+class CategoryViewSet(ProtegidoMixin, viewsets.ModelViewSet):
+    queryset = Category.objects.order_by("id")
+    serializer_class = CategorySerializer
 
     def perform_destroy(self, instance):
-        # Misma política que la web: borrado lógico, no se borra la fila.
-        instance.soft_delete()
+        if instance.devices.exists():
+            raise Conflicto("La categoría tiene dispositivos asociados.")
+        super().perform_destroy(instance)
+
+
+class ManufacturerViewSet(ProtegidoMixin, viewsets.ModelViewSet):
+    queryset = Manufacturer.objects.order_by("id")
+    serializer_class = ManufacturerSerializer
+
+    def perform_destroy(self, instance):
+        if instance.devices.exists():
+            raise Conflicto("El fabricante tiene dispositivos asociados.")
+        super().perform_destroy(instance)

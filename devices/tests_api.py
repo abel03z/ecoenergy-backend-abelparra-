@@ -141,7 +141,7 @@ class DeviceApiJwtTests(APITestCase):
     # --- alcance por organización -----------------------------------------
     def test_lista_solo_muestra_su_organizacion(self):
         self.auth("operador_api")
-        ids = [d["id"] for d in self.client.get("/api/devices/").json()]
+        ids = [d["id"] for d in self.client.get("/api/devices/").json()["results"]]
         self.assertIn(self.dev_norte.pk, ids)
         self.assertNotIn(self.dev_sur.pk, ids)
 

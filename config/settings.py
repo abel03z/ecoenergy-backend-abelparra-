@@ -189,3 +189,25 @@ MAILERS = {"default": _mailer}
 # SOLO para demostraciones sin servidor de correo: muestra el código en pantalla.
 # Debe permanecer en False en cualquier uso real.
 PASSWORD_RESET_DEMO_MODE = os.getenv("PASSWORD_RESET_DEMO_MODE", "False").lower() == "true"
+
+
+# --- API REST (Django REST Framework + Simple JWT) ---------------------------
+from datetime import timedelta  # noqa: E402
+
+REST_FRAMEWORK = {
+    # JWT como único autenticador: sin token -> 401 (no 403).
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    # La API entrega solo JSON.
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_PAGINATION_CLASS": "core.api_pagination.StandardPagination",
+    "PAGE_SIZE": 20,
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}

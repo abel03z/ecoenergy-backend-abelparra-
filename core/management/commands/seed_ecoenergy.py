@@ -99,7 +99,7 @@ ALERT_MESSAGES = {
 
 # Cantidades de la carga masiva (por todas las organizaciones)
 BULK_DEVICES_PER_ORG = 75
-BULK_MEASUREMENTS = 600
+BULK_MEASUREMENTS = 1600
 BULK_ALERTS = 200
 BULK_MAINTENANCES = 150
 BULK_ASSIGNMENTS = 60
@@ -112,6 +112,7 @@ TEST_USERNAMES = [
     "Operador2",
     "consulta_sur",
     "staff_sin_perfil",
+    "sin_rol_api",
 ]
 
 
@@ -321,6 +322,18 @@ class Command(BaseCommand):
             password=self.password, is_staff=True
         )
         staff_sin_perfil.groups.add(groups["Operador"])
+
+        # Sumativa 3: usuario autenticado SIN rol API (sin grupos): la API lo rechaza con 403.
+        sin_rol_api = User.objects.create_user(
+            username="sin_rol_api", email="sin_rol_api@ecoenergy.test",
+            password=self.password,
+        )
+        UserProfile.objects.create(
+            user=sin_rol_api,
+            organization=orgs["norte"]["org"],
+            department=orgs["norte"]["dept_ops"],
+            employee_code="EMP-006",
+        )
 
         # Operación: responsables asignados a dispositivos de su organización.
         DeviceAssignment.objects.create(

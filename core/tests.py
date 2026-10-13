@@ -69,11 +69,21 @@ class SeedTests(TestCase):
             else:
                 self.assertIsNone(m.completed_at)
 
+    def test_volumen_minimo_de_2000_registros_de_dominio(self):
+        # Sumativa 3: al menos 2.000 registros vigentes y ningún modelo exigido vacío.
+        from devices.models import Category, Device, Manufacturer
+        from monitoring.models import Alert, Measurement
+        from organizations.models import Zone
+        modelos = [Device, Zone, Category, Manufacturer, Measurement, Alert]
+        for modelo in modelos:
+            self.assertGreater(modelo.objects.count(), 0, modelo.__name__)
+        self.assertGreaterEqual(sum(business_counts().values()), 2000)
+
     def test_es_reproducible_con_reset(self):
         before = business_counts()
         call_command("seed_ecoenergy", "--reset", stdout=StringIO())
         self.assertEqual(business_counts(), before)
-        self.assertEqual(UserProfile.objects.count(), 5)
+        self.assertEqual(UserProfile.objects.count(), 6)  # incluye sin_rol_api
 
 
 class SeedPasswordTests(TestCase):
