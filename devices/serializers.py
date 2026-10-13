@@ -2,7 +2,7 @@ from pathlib import Path
 
 from rest_framework import serializers
 
-from .models import Device
+from .models import Category, Device, Manufacturer
 from .validators import validate_real_image
 
 MAX_SIZE = 2 * 1024 * 1024  # 2 MB (misma regla que DeviceForm)
@@ -46,3 +46,39 @@ class DeviceSerializer(serializers.ModelSerializer):
         except Exception:
             raise serializers.ValidationError("El archivo no es una imagen válida.")
         return image
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ["id", "name"]
+        read_only_fields = ["id"]
+
+    def validate_name(self, value):
+        value = value.strip()
+        if len(value) < 3:
+            raise serializers.ValidationError("Ingrese al menos 3 caracteres.")
+        qs = Category.objects.filter(name__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("Ya existe una categoría con ese nombre.")
+        return value
+
+
+class ManufacturerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Manufacturer
+        fields = ["id", "name", "country"]
+        read_only_fields = ["id"]
+
+    def validate_name(self, value):
+        value = value.strip()
+        if len(value) < 2:
+            raise serializers.ValidationError("Ingrese al menos 2 caracteres.")
+        qs = Manufacturer.objects.filter(name__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("Ya existe un fabricante con ese nombre.")
+        return value
