@@ -2,11 +2,11 @@
 
 | Campo | Dato |
 |---|---|
-| Asignatura | Programación Back End (TI3041) · sección vespertina |
+| Asignatura | Programación Back End · sección vespertina |
 | Proyecto | EcoEnergy (`ecoenergy-backend-abelparra-`) |
 | Estudiante | Abel Parra |
 | Rama / commit | u3-sumativa3-api 
-| hash:| fbb20e988f87994dd3d1076f94ddd3ab5271c4ea |
+| hash:| 1df7ec1a975aaa51c3f37ede2241faab1167ea99 |
 | Fecha de ejecución | 13-10-2026 |
 | Entorno | Servidor local `http://127.0.0.1:8000` (`python manage.py runserver`), Apidog de escritorio |
 | Datos | `python manage.py seed_ecoenergy --reset` → 2.197 registros de dominio vigentes |
